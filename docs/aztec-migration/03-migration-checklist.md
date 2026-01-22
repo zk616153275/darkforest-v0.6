@@ -15,9 +15,9 @@
 
 ### 1.1 开发环境
 
-- [ ] 安装 Noir 工具链 (`noirup`, `nargo`)
-- [ ] 安装 Aztec Sandbox (`aztec-up`)
-- [ ] 启动本地 Aztec 网络
+- [x] 安装 Noir 工具链 (`noirup`, `nargo`)
+- [x] 安装 Aztec Sandbox (`aztec-up`)
+- [x] 启动本地 Aztec 网络
 - [ ] 安装 Aztec.js SDK
 
 ### 1.2 学习资料
