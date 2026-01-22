@@ -56,6 +56,14 @@ pub contract DarkForest {
 
         // Planet perlin values (for determining space type)
         planet_perlin: Map<Field, PublicMutable<u64, Context>, Context>,
+
+        // Revealed Coordinates (split for simpler storage)
+        revealed_x: Map<Field, PublicMutable<Field, Context>, Context>,
+        revealed_y: Map<Field, PublicMutable<Field, Context>, Context>,
+        revealed_revealer: Map<Field, PublicMutable<AztecAddress, Context>, Context>,
+
+        // Player cooldowns
+        player_last_reveal: Map<AztecAddress, PublicMutable<u64, Context>, Context>,
     }
 
     // =========================================================================
@@ -329,6 +337,62 @@ pub contract DarkForest {
     }
 
     // =========================================================================
+    // Location Reveal
+    // =========================================================================
+
+    /// Reveal a planet's location publicly
+    ///
+    /// # Arguments
+    /// * `x`, `y` - Private coordinates
+    /// * `planet_id` - Public planet ID
+    /// * `planethash_key` - Key for verification
+    #[external("private")]
+    fn reveal_location(
+        x: Field,
+        y: Field,
+        planet_id: Field,
+        planethash_key: Field
+    ) {
+        // 1. Verify hash
+        let computed = compute_planet_hash(x, y, planethash_key);
+        assert(computed == planet_id, "Invalid coordinates");
+
+        // 2. Get sender
+        let sender = self.context.msg_sender().unwrap();
+
+        // 3. Enqueue public callback
+        self.enqueue_self.reveal_callback(planet_id, x, y, sender);
+    }
+
+    /// Process location reveal
+    ///
+    /// Validates cooldown and updates revealed state
+    #[external("public")]
+    #[only_self]
+    fn reveal_callback(
+        planet_id: Field,
+        x: Field,
+        y: Field,
+        sender: AztecAddress
+    ) {
+        // 1. Check cooldown (24 hours = 86400 seconds)
+        let last_reveal = self.storage.player_last_reveal.at(sender).read();
+        let current_time = self.context.timestamp();
+        // Note: Check for underflow/first time (last_reveal could be 0)
+        if last_reveal != 0 {
+            assert(current_time >= last_reveal + 86400, "Reveal cooldown active");
+        }
+
+        // 2. Update revealed state
+        self.storage.revealed_x.at(planet_id).write(x);
+        self.storage.revealed_y.at(planet_id).write(y);
+        self.storage.revealed_revealer.at(planet_id).write(sender);
+
+        // 3. Update player cooldown
+        self.storage.player_last_reveal.at(sender).write(current_time);
+    }
+
+    // =========================================================================
     // Admin Functions
     // =========================================================================
 
@@ -438,5 +502,17 @@ pub contract DarkForest {
     #[view]
     fn is_planet_initialized(planet_id: Field) -> pub bool {
         self.storage.planet_owners.at(planet_id).read() != AztecAddress::zero()
+    }
+
+    /// Get revealed coordinates for a planet
+    #[external("public")]
+    #[view]
+    fn get_revealed_coords(planet_id: Field) -> pub crate::types::planet::RevealedCoords {
+        crate::types::planet::RevealedCoords {
+            location_id: planet_id,
+            x: self.storage.revealed_x.at(planet_id).read(),
+            y: self.storage.revealed_y.at(planet_id).read(),
+            revealer: self.storage.revealed_revealer.at(planet_id).read(),
+        }
     }
 }

@@ -55,44 +55,44 @@ pub struct PlanetPublicState {
     pub perlin: u64,
 }
 
-impl PlanetPublicState {
-    /// Create a default uninitialized planet
+/// Revealed coordinates public state
+/// Stores valid coordinates that have been revealed
+pub struct RevealedCoords {
+    pub location_id: Field,
+    pub x: Field,
+    pub y: Field,
+    pub revealer: AztecAddress,
+}
+
+impl RevealedCoords {
     pub fn default() -> Self {
         Self {
-            planet_id: 0,
-            owner: AztecAddress::zero(),
-            level: 0,
-            planet_type: 0,
-            space_type: 0,
-            range: 0,
-            speed: 0,
-            defense: 0,
-            population: 0,
-            population_cap: 0,
-            population_growth: 0,
-            silver_cap: 0,
-            silver_growth: 0,
-            silver: 0,
-            is_initialized: false,
-            is_home_planet: false,
-            is_destroyed: false,
-            last_updated: 0,
-            upgrade_state_0: 0,
-            upgrade_state_1: 0,
-            upgrade_state_2: 0,
-            hat_level: 0,
-            has_tried_finding_artifact: false,
-            prospected_block_number: 0,
-            invader: AztecAddress::zero(),
-            invade_start_block: 0,
-            capturer: AztecAddress::zero(),
-            perlin: 0,
+            location_id: 0,
+            x: 0,
+            y: 0,
+            revealer: AztecAddress::zero(),
         }
     }
+}
 
-    /// Check if planet is initialized
-    pub fn is_init(self) -> bool {
-        self.is_initialized
+use dep::aztec::protocol_types::traits::{Serialize, Deserialize, ToField, FromField};
+
+impl Serialize for RevealedCoords {
+    let N: u32 = 4;
+    fn serialize(self) -> [Field; 4] {
+        [self.location_id, self.x, self.y, self.revealer.to_field()]
+    }
+}
+
+impl Deserialize for RevealedCoords {
+    let N: u32 = 4;
+    fn deserialize(input: [Field; 4]) -> Self {
+        Self {
+            location_id: input[0],
+            x: input[1],
+            y: input[2],
+            revealer: AztecAddress::from_field(input[3]),
+        }
     }
 }
 
