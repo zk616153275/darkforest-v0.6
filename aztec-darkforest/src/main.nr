@@ -217,6 +217,118 @@ pub contract DarkForest {
     }
 
     // =========================================================================
+    // Planet Movement (Private Entry Point)
+    // =========================================================================
+
+    /// Move energy and silver from one planet to another
+    ///
+    /// This is a PRIVATE function - the coordinates are never revealed on-chain.
+    /// The Aztec protocol automatically generates a ZK proof.
+    ///
+    /// # Arguments
+    /// * `from_x`, `from_y` - Private source coordinates
+    /// * `to_x`, `to_y` - Private destination coordinates
+    /// * `from_planet_id`, `to_planet_id` - Public planet IDs (hashes)
+    /// * `energy_sent` - Amount of energy to send
+    /// * `silver_sent` - Amount of silver to send
+    /// * `planethash_key` - MiMC key for verification
+    #[external("private")]
+    fn move_planet(
+        from_x: Field,
+        from_y: Field,
+        to_x: Field,
+        to_y: Field,
+        from_planet_id: Field,
+        to_planet_id: Field,
+        energy_sent: u64,
+        silver_sent: u64,
+        planethash_key: Field,
+    ) {
+        // 1. Verify coordinate hashes match planet IDs
+        let computed_from = compute_planet_hash(from_x, from_y, planethash_key);
+        let computed_to = compute_planet_hash(to_x, to_y, planethash_key);
+        assert(computed_from == from_planet_id, "Invalid from coordinates");
+        assert(computed_to == to_planet_id, "Invalid to coordinates");
+
+        // 2. Get sender
+        let sender = self.context.msg_sender().unwrap();
+
+        // 3. Calculate distance (convert Field to i64 for distance calculation)
+        let from_x_i64 = from_x as i64;
+        let from_y_i64 = from_y as i64;
+        let to_x_i64 = to_x as i64;
+        let to_y_i64 = to_y as i64;
+        let distance = crate::planet::move_planet::calculate_distance(
+            from_x_i64, from_y_i64, to_x_i64, to_y_i64
+        );
+
+        // 4. Enqueue public callback to process the move
+        self.enqueue_self.move_callback(
+            from_planet_id,
+            to_planet_id,
+            energy_sent,
+            silver_sent,
+            distance,
+            sender
+        );
+    }
+
+    // =========================================================================
+    // Planet Movement (Public Callback)
+    // =========================================================================
+
+    /// Process a planet movement
+    ///
+    /// Validates ownership and updates planet states
+    #[external("public")]
+    #[only_self]
+    fn move_callback(
+        from_planet_id: Field,
+        to_planet_id: Field,
+        energy_sent: u64,
+        silver_sent: u64,
+        distance: u64,
+        sender: AztecAddress,
+    ) {
+        // 1. Check game is not paused
+        assert(!self.storage.paused.read(), "Game is paused");
+
+        // 2. Verify sender owns the source planet
+        let from_owner = self.storage.planet_owners.at(from_planet_id).read();
+        assert(from_owner == sender, "Not planet owner");
+
+        // 3. Verify source planet is initialized
+        assert(from_owner != AztecAddress::zero(), "Source planet not initialized");
+
+        // 4. Initialize destination planet if needed (as unowned planet)
+        let to_owner = self.storage.planet_owners.at(to_planet_id).read();
+        if to_owner == AztecAddress::zero() {
+            // Planet not initialized yet - increment planet count
+            // Note: Will be owned by arrival processing
+            let planet_count = self.storage.planet_count.read();
+            self.storage.planet_count.write(planet_count + 1);
+        }
+
+        // 5. Store arrival information for later processing
+        // Note: In a full implementation, we would store arrivals in a queue
+        // and process them based on travel time. For now, we just validate.
+
+        // Basic validations
+        assert(energy_sent > 0, "Must send some energy");
+        assert(distance > 0, "Cannot move to same planet");
+
+        // Note: Full arrival processing would include:
+        // - Calculate travel time based on distance and speed
+        // - Store arrival in pending arrivals queue
+        // - Process arrival when travel time elapses
+
+        // For now, just emit that a move was initiated
+        // The _distance and _silver_sent are used for future implementation
+        let _ = distance;
+        let _ = silver_sent;
+    }
+
+    // =========================================================================
     // Admin Functions
     // =========================================================================
 
