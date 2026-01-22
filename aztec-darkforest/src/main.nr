@@ -281,4 +281,50 @@ pub contract DarkForest {
             self.storage.init_perlin_max.read()
         )
     }
+
+    // =========================================================================
+    // Player Query Functions
+    // =========================================================================
+
+    /// Check if a player is initialized
+    #[external("public")]
+    #[view]
+    fn is_player_initialized(player: AztecAddress) -> pub bool {
+        self.storage.player_home_planets.at(player).read() != 0
+    }
+
+    /// Get a player's home planet ID
+    /// Returns 0 if player is not initialized
+    #[external("public")]
+    #[view]
+    fn get_player_home_planet(player: AztecAddress) -> pub Field {
+        self.storage.player_home_planets.at(player).read()
+    }
+
+    // =========================================================================
+    // Planet Query Functions
+    // =========================================================================
+
+    /// Get the owner of a planet
+    /// Returns zero address if planet is not initialized
+    #[external("public")]
+    #[view]
+    fn get_planet_owner(planet_id: Field) -> pub AztecAddress {
+        self.storage.planet_owners.at(planet_id).read()
+    }
+
+    /// Get the perlin value of a planet
+    /// Used to determine space type
+    #[external("public")]
+    #[view]
+    fn get_planet_perlin(planet_id: Field) -> pub u64 {
+        self.storage.planet_perlin.at(planet_id).read()
+    }
+
+    /// Check if a planet is initialized (has an owner)
+    #[external("public")]
+    #[view]
+    fn is_planet_initialized(planet_id: Field) -> pub bool {
+        self.storage.planet_owners.at(planet_id).read() != AztecAddress::zero()
+    }
 }
