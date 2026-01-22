@@ -13,7 +13,7 @@ pub contract DarkForest {
     use aztec::{
         protocol_types::address::AztecAddress,
         macros::{functions::{external, initializer, internal, view, only_self}, storage::storage},
-        state_vars::{public_mutable::PublicMutable, Map},
+        state_vars::{public_mutable::PublicMutable, public_immutable::PublicImmutable, Map},
     };
 
     // Import utility functions
@@ -30,19 +30,19 @@ pub contract DarkForest {
         paused: PublicMutable<bool, Context>,
 
         // Game Configuration
-        world_radius: PublicMutable<u64, Context>,
-        planethash_key: PublicMutable<Field, Context>,
-        spacetype_key: PublicMutable<Field, Context>,
-        perlin_length_scale: PublicMutable<u64, Context>,
+        world_radius: PublicImmutable<u64, Context>,
+        planethash_key: PublicImmutable<Field, Context>,
+        spacetype_key: PublicImmutable<Field, Context>,
+        perlin_length_scale: PublicImmutable<u64, Context>,
 
         // Initialization bounds (perlin range for spawning)
-        init_perlin_min: PublicMutable<u64, Context>,
-        init_perlin_max: PublicMutable<u64, Context>,
+        init_perlin_min: PublicImmutable<u64, Context>,
+        init_perlin_max: PublicImmutable<u64, Context>,
 
         // Perlin thresholds for space types
-        perlin_threshold_1: PublicMutable<u64, Context>,
-        perlin_threshold_2: PublicMutable<u64, Context>,
-        perlin_threshold_3: PublicMutable<u64, Context>,
+        perlin_threshold_1: PublicImmutable<u64, Context>,
+        perlin_threshold_2: PublicImmutable<u64, Context>,
+        perlin_threshold_3: PublicImmutable<u64, Context>,
 
         // Counters
         planet_count: PublicMutable<u64, Context>,
@@ -51,11 +51,8 @@ pub contract DarkForest {
         // Player tracking: address => home_planet_id (0 = not initialized)
         player_home_planets: Map<AztecAddress, PublicMutable<Field, Context>, Context>,
 
-        // Planet tracking: planet_id => owner (zero address = not initialized)
-        planet_owners: Map<Field, PublicMutable<AztecAddress, Context>, Context>,
-
-        // Planet perlin values (for determining space type)
-        planet_perlin: Map<Field, PublicMutable<u64, Context>, Context>,
+        // Planet tracking: Full state storage
+        planets: Map<Field, PublicMutable<crate::types::planet::PlanetPublicState, Context>, Context>,
 
         // Revealed Coordinates (split for simpler storage)
         revealed_x: Map<Field, PublicMutable<Field, Context>, Context>,
@@ -96,19 +93,19 @@ pub contract DarkForest {
         self.storage.paused.write(false);
 
         // Game config
-        self.storage.world_radius.write(world_radius);
-        self.storage.planethash_key.write(planethash_key);
-        self.storage.spacetype_key.write(spacetype_key);
-        self.storage.perlin_length_scale.write(perlin_length_scale);
+        self.storage.world_radius.initialize(world_radius);
+        self.storage.planethash_key.initialize(planethash_key);
+        self.storage.spacetype_key.initialize(spacetype_key);
+        self.storage.perlin_length_scale.initialize(perlin_length_scale);
 
-        // Perlin spawn bounds
-        self.storage.init_perlin_min.write(init_perlin_min);
-        self.storage.init_perlin_max.write(init_perlin_max);
+        // Initialization bounds
+        self.storage.init_perlin_min.initialize(init_perlin_min);
+        self.storage.init_perlin_max.initialize(init_perlin_max);
 
         // Default perlin thresholds for space types
-        self.storage.perlin_threshold_1.write(11);
-        self.storage.perlin_threshold_2.write(13);
-        self.storage.perlin_threshold_3.write(15);
+        self.storage.perlin_threshold_1.initialize(11);
+        self.storage.perlin_threshold_2.initialize(13);
+        self.storage.perlin_threshold_3.initialize(15);
 
         // Counters
         self.storage.planet_count.write(0);
@@ -144,13 +141,15 @@ pub contract DarkForest {
     fn initialize_player(
         x: Field,
         y: Field,
-        planethash_key: Field,
-        spacetype_key: Field,
-        perlin_scale: u64,
-        world_radius: u64,
-        init_perlin_min: u64,
-        init_perlin_max: u64,
     ) -> pub Field {
+        // Read config from PublicImmutable
+        let planethash_key = self.storage.planethash_key.read();
+        let world_radius = self.storage.world_radius.read();
+        let spacetype_key = self.storage.spacetype_key.read();
+        let perlin_scale = self.storage.perlin_length_scale.read();
+        let init_perlin_min = self.storage.init_perlin_min.read();
+        let init_perlin_max = self.storage.init_perlin_max.read();
+
         // 1. Compute planet_id = MiMC(x, y, key)
         let planet_id = compute_planet_hash(x, y, planethash_key);
 
@@ -187,15 +186,11 @@ pub contract DarkForest {
     // Player Initialization (Internal Callback)
     // =========================================================================
 
-    /// Internal callback to update public state after player initialization
-    ///
-    /// This function is called by the private `initialize_player` function.
-    /// It updates the on-chain visible state.
-    ///
     /// Note: The sender parameter is passed from enqueue_self context
     #[external("public")]
     #[only_self]
     fn initialize_player_callback(planet_id: Field, perlin: u64, sender: AztecAddress) {
+
         // 1. Check game is not paused
         assert(!self.storage.paused.read(), "Game is paused");
 
@@ -203,20 +198,47 @@ pub contract DarkForest {
         let existing_home = self.storage.player_home_planets.at(sender).read();
         assert(existing_home == 0, "Player already initialized");
 
-        // 3. Check planet not already taken (owner != zero address)
-        let existing_owner = self.storage.planet_owners.at(planet_id).read();
-        assert(existing_owner == AztecAddress::zero(), "Planet already taken");
+        // 3. Check planet not already taken
+        // We check if planet_id exists in planets map by checking owner/init status
+        // But since Map keys always exist with default values, we check owner.
+        // However, we changed storage to PlanetPublicState, so we read the struct.
+        let existing_planet = self.storage.planets.at(planet_id).read();
+        assert(existing_planet.owner == AztecAddress::zero(), "Planet already taken");
 
-        // 4. Store player's home planet
+        // 4. Calculate Space Type
+        let t1 = self.storage.perlin_threshold_1.read();
+        let t2 = self.storage.perlin_threshold_2.read();
+        let t3 = self.storage.perlin_threshold_3.read();
+        let space_type = crate::types::enums::get_space_type_from_perlin(perlin, t1, t2, t3);
+
+        // 5. Determine Planet Level
+        // TODO: Implement level calculation based on hash thresholds
+        let level = 1; // Default to level 1 for home planets for now
+
+        // 6. Create Initial Planet State
+        let timestamp = self.context.timestamp();
+        let new_planet = crate::planet::init::create_initial_planet(
+            planet_id,
+            sender,
+            level,
+            space_type,
+            perlin,
+            true, // is_home_planet
+            timestamp
+        );
+
+        // 7. Store Planet
+        self.storage.planets.at(planet_id).write(new_planet);
+
+        // 8. Store player's home planet
         self.storage.player_home_planets.at(sender).write(planet_id);
 
-        // 5. Store planet owner
-        self.storage.planet_owners.at(planet_id).write(sender);
+        // 9. Store planet perlin separately if needed for other checks,
+        // but it is now in PlanetPublicState. Keeping the separate map for now
+        // as per Storage definition, or should I remove it?
+        // I removed it in previous step! So no need to write.
 
-        // 6. Store planet perlin (for space type calculation)
-        self.storage.planet_perlin.at(planet_id).write(perlin);
-
-        // 7. Increment counters
+        // 10. Increment counters
         let player_count = self.storage.player_count.read();
         self.storage.player_count.write(player_count + 1);
 
@@ -250,8 +272,12 @@ pub contract DarkForest {
         to_planet_id: Field,
         energy_sent: u64,
         silver_sent: u64,
-        planethash_key: Field,
     ) {
+        // Read config from PublicImmutable
+        let planethash_key = self.storage.planethash_key.read();
+        let spacetype_key = self.storage.spacetype_key.read();
+        let perlin_scale = self.storage.perlin_length_scale.read();
+
         // 1. Verify coordinate hashes match planet IDs
         let computed_from = compute_planet_hash(from_x, from_y, planethash_key);
         let computed_to = compute_planet_hash(to_x, to_y, planethash_key);
@@ -270,13 +296,17 @@ pub contract DarkForest {
             from_x_i64, from_y_i64, to_x_i64, to_y_i64
         );
 
-        // 4. Enqueue public callback to process the move
+        // 4. Calculate destination perlin (needed for initialization if new)
+        let to_perlin = crate::utils::perlin::compute_perlin(to_x, to_y, spacetype_key, perlin_scale);
+
+        // 5. Enqueue public callback to process the move
         self.enqueue_self.move_callback(
             from_planet_id,
             to_planet_id,
             energy_sent,
             silver_sent,
             distance,
+            to_perlin,
             sender
         );
     }
@@ -296,23 +326,43 @@ pub contract DarkForest {
         energy_sent: u64,
         silver_sent: u64,
         distance: u64,
+        to_perlin: u64,
         sender: AztecAddress,
     ) {
         // 1. Check game is not paused
         assert(!self.storage.paused.read(), "Game is paused");
 
-        // 2. Verify sender owns the source planet
-        let from_owner = self.storage.planet_owners.at(from_planet_id).read();
-        assert(from_owner == sender, "Not planet owner");
+        // 2. Verify sender owns the source planet and it is initialized
+        let from_planet = self.storage.planets.at(from_planet_id).read();
+        assert(from_planet.owner == sender, "Not planet owner");
+        assert(from_planet.is_initialized, "Source planet not initialized");
 
-        // 3. Verify source planet is initialized
-        assert(from_owner != AztecAddress::zero(), "Source planet not initialized");
+        // 3. Initialize destination planet if needed (as unowned planet)
+        let to_planet = self.storage.planets.at(to_planet_id).read();
+        if !to_planet.is_initialized {
+            // Planet not initialized yet - created unowned planet
 
-        // 4. Initialize destination planet if needed (as unowned planet)
-        let to_owner = self.storage.planet_owners.at(to_planet_id).read();
-        if to_owner == AztecAddress::zero() {
-            // Planet not initialized yet - increment planet count
-            // Note: Will be owned by arrival processing
+            // Calculate Space Type
+            let t1 = self.storage.perlin_threshold_1.read();
+            let t2 = self.storage.perlin_threshold_2.read();
+            let t3 = self.storage.perlin_threshold_3.read();
+            let space_type = crate::types::enums::get_space_type_from_perlin(to_perlin, t1, t2, t3);
+
+            // Level 0 for unowned planets
+            let level = 0;
+            let timestamp = self.context.timestamp();
+
+            let new_to_planet = crate::planet::init::create_unowned_planet(
+                to_planet_id,
+                level,
+                space_type,
+                to_perlin,
+                timestamp
+            );
+
+            self.storage.planets.at(to_planet_id).write(new_to_planet);
+
+            // Increment planet count for new discovery
             let planet_count = self.storage.planet_count.read();
             self.storage.planet_count.write(planet_count + 1);
         }
@@ -486,7 +536,7 @@ pub contract DarkForest {
     #[external("public")]
     #[view]
     fn get_planet_owner(planet_id: Field) -> pub AztecAddress {
-        self.storage.planet_owners.at(planet_id).read()
+        self.storage.planets.at(planet_id).read().owner
     }
 
     /// Get the perlin value of a planet
@@ -494,14 +544,14 @@ pub contract DarkForest {
     #[external("public")]
     #[view]
     fn get_planet_perlin(planet_id: Field) -> pub u64 {
-        self.storage.planet_perlin.at(planet_id).read()
+        self.storage.planets.at(planet_id).read().perlin
     }
 
-    /// Check if a planet is initialized (has an owner)
+    /// Check if a planet is initialized (has an owner or marked initialized)
     #[external("public")]
     #[view]
     fn is_planet_initialized(planet_id: Field) -> pub bool {
-        self.storage.planet_owners.at(planet_id).read() != AztecAddress::zero()
+        self.storage.planets.at(planet_id).read().is_initialized
     }
 
     /// Get revealed coordinates for a planet

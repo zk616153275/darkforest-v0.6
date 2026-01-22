@@ -75,7 +75,7 @@ impl RevealedCoords {
     }
 }
 
-use dep::aztec::protocol_types::traits::{Serialize, Deserialize, ToField, FromField};
+use dep::aztec::protocol_types::traits::{Serialize, Deserialize, ToField, FromField, Packable};
 
 impl Serialize for RevealedCoords {
     let N: u32 = 4;
@@ -93,6 +93,16 @@ impl Deserialize for RevealedCoords {
             y: input[2],
             revealer: AztecAddress::from_field(input[3]),
         }
+    }
+}
+
+impl Packable for RevealedCoords {
+    let N: u32 = 4;
+    fn pack(self) -> [Field; 4] {
+        self.serialize()
+    }
+    fn unpack(input: [Field; 4]) -> Self {
+        Self::deserialize(input)
     }
 }
 
@@ -165,6 +175,16 @@ impl Deserialize for PlanetPublicState {
             capturer: AztecAddress::from_field(input[26]),
             perlin: input[27] as u64,
         }
+    }
+}
+
+impl Packable for PlanetPublicState {
+    let N: u32 = 28;
+    fn pack(self) -> [Field; 28] {
+        self.serialize()
+    }
+    fn unpack(input: [Field; 28]) -> Self {
+        Self::deserialize(input)
     }
 }
 
