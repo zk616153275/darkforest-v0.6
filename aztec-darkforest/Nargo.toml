@@ -1,0 +1,11 @@
+[package]
+name = "darkforest"
+version = "0.1.0"
+type = "contract"
+authors = ["Dark Forest Team"]
+compiler_version = ">=1.0.0"
+
+
+[dependencies]
+aztec = { git="https://github.com/AztecProtocol/aztec-nr/", tag="v3.0.0-devnet.6-patch.1", directory="aztec" }
+mimc = { git = "https://github.com/noir-lang/mimc", tag = "v0.1.0" }
