@@ -10,6 +10,7 @@ pub fn sqrt_u64(x: u64) -> u64 {
         let mut y = x;
 
         // Newton's method iterations
+        // 32 iterations is enough for u64
         for _ in 0..32 {
             if z < y {
                 y = z;

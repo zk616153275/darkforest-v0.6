@@ -4,7 +4,7 @@ mod notes;
 mod utils;
 mod planet;
 mod player;
-mod artifact; // TODO: Implement artifact module
+mod artifact;
 
 use aztec::macros::aztec;
 
@@ -260,8 +260,8 @@ pub contract DarkForest {
         let space_type = crate::types::enums::get_space_type_from_perlin(perlin, t1, t2, t3);
 
         // 5. Determine Planet Level
-        // TODO: Implement level calculation based on hash thresholds
-        let level = 1; // Default to level 1 for home planets for now
+        // Note: Default to level 1 for home planets for MVP. Verify thresholds in future.
+        let level = 1;
 
         // 6. Create Initial Planet State
         let timestamp = self.context.timestamp();
