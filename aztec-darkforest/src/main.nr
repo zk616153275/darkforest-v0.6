@@ -47,6 +47,11 @@ pub contract DarkForest {
         // Counters
         planet_count: PublicMutable<u64, Context>,
         player_count: PublicMutable<u64, Context>,
+        artifact_count: PublicMutable<u64, Context>,
+
+        // Artifacts
+        artifacts: Map<Field, PublicMutable<crate::types::artifact::ArtifactState, Context>, Context>,
+        planet_artifact: Map<Field, PublicMutable<Field, Context>, Context>,
 
         // Player tracking: address => home_planet_id (0 = not initialized)
         player_home_planets: Map<AztecAddress, PublicMutable<Field, Context>, Context>,
@@ -110,6 +115,8 @@ pub contract DarkForest {
         // Counters
         self.storage.planet_count.write(0);
         self.storage.player_count.write(0);
+        self.storage.artifact_count.write(0);
+        self.storage.artifact_count.write(0);
     }
 
     // =========================================================================
@@ -496,6 +503,102 @@ pub contract DarkForest {
         self.storage.planets.at(planet_id).write(planet);
     }
     // =========================================================================
+    // Artifact Discovery
+    // =========================================================================
+
+    /// Search for an artifact on a planet
+    ///
+    /// # Arguments
+    /// * `x`, `y` - Private coordinates
+    /// * `planet_id` - Planet to search on
+    #[external("private")]
+    fn find_artifact(
+        x: Field,
+        y: Field,
+        planet_id: Field
+    ) {
+        // Read config
+        let planethash_key = self.storage.planethash_key.read();
+
+        // 1. Verify hash
+        let computed = compute_planet_hash(x, y, planethash_key);
+        assert(computed == planet_id, "Invalid coordinates");
+
+        // 2. Get sender
+        let sender = self.context.msg_sender().unwrap();
+
+        // 3. Enqueue public callback
+        self.enqueue_self.find_artifact_callback(planet_id, sender);
+    }
+
+    /// Process artifact discovery
+    ///
+    /// Validates cost and randomness
+    #[external("public")]
+    #[only_self]
+    fn find_artifact_callback(
+        planet_id: Field,
+        sender: AztecAddress
+    ) {
+        // 1. Check game is not paused
+        assert(!self.storage.paused.read(), "Game is paused");
+
+        // 2. Verify ownership and initialization
+        let mut planet = self.storage.planets.at(planet_id).read();
+        assert(planet.owner == sender, "Not planet owner");
+        assert(planet.is_initialized, "Planet not initialized");
+        assert(!planet.has_tried_finding_artifact, "Already searched this planet");
+
+        // 3. Refresh state
+        let timestamp = self.context.timestamp();
+        planet = crate::planet::state::refresh_planet_state(planet, timestamp);
+
+        // 4. Calculate cost (50% of max population)
+        let cost = planet.population_cap / 2;
+        assert(planet.population >= cost, "Insufficient energy for prospecting");
+        planet.population -= cost;
+
+        // 5. Mark as searched
+        planet.has_tried_finding_artifact = true;
+        self.storage.planets.at(planet_id).write(planet);
+
+        // 6. Check for artifact
+        if crate::artifact::discovery::is_artifact_found(planet_id) {
+            // Found! Mint artifact
+            let rarity = crate::artifact::discovery::roll_rarity(planet_id);
+            // We need space_type/biome for type rolling?
+            // SpaceType is public logic? No, derived from Perlin.
+            // But we don't have Perlin passed here. Storage has `current_perlin`.
+            let planet_perlin = planet.perlin;
+
+            // Get space type to influence artifact?
+            // For now, allow roll regardless of biome, or use mock biome
+            let artifact_type = crate::artifact::discovery::roll_artifact_type(planet_id, planet_perlin as u8);
+
+            // Increment count for ID
+            let mut count = self.storage.artifact_count.read();
+            count += 1;
+            self.storage.artifact_count.write(count);
+
+            let new_artifact_id = count as Field; // Simple ID generation
+
+            // Create Artifact
+            let mut artifact = crate::types::artifact::ArtifactState::default();
+            artifact.id = new_artifact_id;
+            artifact.is_initialized = true;
+            artifact.planet_discovered_on = planet_id;
+            artifact.discoverer = sender;
+            artifact.minted_at_timestamp = timestamp;
+            artifact.artifact_type = artifact_type;
+            artifact.rarity = rarity;
+
+            // Link storage
+            self.storage.artifacts.at(new_artifact_id).write(artifact);
+            self.storage.planet_artifact.at(planet_id).write(new_artifact_id);
+        }
+    }
+
+    // =========================================================================
     // Location Reveal
     // =========================================================================
 
@@ -713,5 +816,30 @@ pub contract DarkForest {
             y: self.storage.revealed_y.at(planet_id).read(),
             revealer: self.storage.revealed_revealer.at(planet_id).read(),
         }
+    }
+
+    // =========================================================================
+    // Artifact Query Functions
+    // =========================================================================
+
+    /// Get total artifact count
+    #[external("public")]
+    #[view]
+    fn get_artifact_count() -> pub u64 {
+        self.storage.artifact_count.read()
+    }
+
+    /// Get artifact by ID
+    #[external("public")]
+    #[view]
+    fn get_artifact(artifact_id: Field) -> pub crate::types::artifact::ArtifactState {
+        self.storage.artifacts.at(artifact_id).read()
+    }
+
+    /// Get artifact on a planet (returns ID, 0 if none)
+    #[external("public")]
+    #[view]
+    fn get_planet_artifact(planet_id: Field) -> pub Field {
+        self.storage.planet_artifact.at(planet_id).read()
     }
 }
