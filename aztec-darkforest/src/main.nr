@@ -333,9 +333,23 @@ pub contract DarkForest {
         assert(!self.storage.paused.read(), "Game is paused");
 
         // 2. Verify sender owns the source planet and it is initialized
-        let from_planet = self.storage.planets.at(from_planet_id).read();
+        let mut from_planet = self.storage.planets.at(from_planet_id).read();
         assert(from_planet.owner == sender, "Not planet owner");
         assert(from_planet.is_initialized, "Source planet not initialized");
+
+        // Refresh source planet state
+        let timestamp = self.context.timestamp();
+        from_planet = crate::planet::state::refresh_planet_state(from_planet, timestamp);
+
+        // Deduct energy and silver
+        assert(from_planet.population >= energy_sent, "Insufficient energy");
+        assert(from_planet.silver >= silver_sent, "Insufficient silver");
+
+        from_planet.population -= energy_sent;
+        from_planet.silver -= silver_sent;
+
+        // Write back source planet
+        self.storage.planets.at(from_planet_id).write(from_planet);
 
         // 3. Initialize destination planet if needed (as unowned planet)
         let to_planet = self.storage.planets.at(to_planet_id).read();

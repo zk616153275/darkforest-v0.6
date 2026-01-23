@@ -1,6 +1,8 @@
 // Planet state management helpers
 // Lazy update logic for energy and silver growth
 
+use crate::types::planet::PlanetPublicState;
+
 /// Apply population (energy) growth over time
 /// Returns updated population value (capped at population_cap)
 pub fn calculate_population_after_growth(
@@ -13,8 +15,9 @@ pub fn calculate_population_after_growth(
         current_population
     } else {
         // Calculate growth: (growth_rate * time) / 3600 seconds per hour
-        let growth = (population_growth * time_elapsed) / 3600;
-        let new_population = current_population + growth;
+        // Note: Integer division floors the result, same as Solidity
+        let growth = (population_growth as Field * time_elapsed as Field) / 3600;
+        let new_population = current_population + growth as u64;
 
         // Cap at population cap
         if new_population > population_cap {
@@ -36,8 +39,8 @@ pub fn calculate_silver_after_growth(
     if silver_growth == 0 {
         current_silver
     } else {
-        let growth = (silver_growth * time_elapsed) / 3600;
-        let new_silver = current_silver + growth;
+        let growth = (silver_growth as Field * time_elapsed as Field) / 3600;
+        let new_silver = current_silver + growth as u64;
 
         if new_silver > silver_cap {
             silver_cap
@@ -45,6 +48,47 @@ pub fn calculate_silver_after_growth(
             new_silver
         }
     }
+}
+
+/// Calculate time elapsed since last update
+pub fn calculate_time_elapsed(current_timestamp: u64, last_updated: u64) -> u64 {
+    if current_timestamp > last_updated {
+        current_timestamp - last_updated
+    } else {
+        0
+    }
+}
+
+/// Refresh planet state (apply growth)
+/// Returns updated PlanetPublicState
+pub fn refresh_planet_state(
+    mut state: PlanetPublicState,
+    timestamp: u64,
+) -> PlanetPublicState {
+    let time_elapsed = calculate_time_elapsed(timestamp, state.last_updated);
+
+    if time_elapsed > 0 {
+        // Update population
+        state.population = calculate_population_after_growth(
+            state.population,
+            state.population_growth,
+            state.population_cap,
+            time_elapsed
+        );
+
+        // Update silver
+        state.silver = calculate_silver_after_growth(
+            state.silver,
+            state.silver_growth,
+            state.silver_cap,
+            time_elapsed
+        );
+
+        // Update timestamp
+        state.last_updated = timestamp;
+    }
+
+    state
 }
 
 /// Get planet's current effective stats (after applying upgrades)
@@ -88,13 +132,4 @@ pub fn get_upgrade_cost(planet_level: u8, current_upgrade_level: u8) -> u64 {
     let base_cost: u64 = 1000 * (planet_level as u64 + 1);
     let level_mult: u64 = (current_upgrade_level as u64 + 1) * 2;
     base_cost * level_mult
-}
-
-/// Calculate time elapsed since last update
-pub fn calculate_time_elapsed(current_timestamp: u64, last_updated: u64) -> u64 {
-    if current_timestamp > last_updated {
-        current_timestamp - last_updated
-    } else {
-        0
-    }
 }
