@@ -188,7 +188,12 @@ fn get_weight(fx: i64, fy: i64, scale: i64, is_right: bool, is_top: bool) -> i64
     let factor_x = denom - diff_x;
     let factor_y = denom - diff_y;
 
-    (factor_x * factor_y) / denom
+    let fx_field = factor_x as u64 as Field;
+    let fy_field = factor_y as u64 as Field;
+    let denom_field = denom as u64 as Field;
+
+    let result_field = (fx_field * fy_field) / denom_field;
+    result_field as i64
 }
 
 /// Floor division (handles negative numbers correctly)

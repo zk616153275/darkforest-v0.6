@@ -168,3 +168,47 @@ pub fn get_upgrade_cost(planet_level: u8, current_upgrade_level: u8) -> u64 {
     let level_mult: u64 = (current_upgrade_level as u64 + 1) * 2;
     base_cost * level_mult
 }
+
+#[test]
+fn test_get_effective_stats_defaults() {
+    let (range, speed, defense, pop_cap, _, _, _) = get_effective_stats(
+        100, 100, 100,
+        1000, 10,
+        500, 5,
+        0, 0, 0,
+        0, 0
+    );
+    assert(range == 100);
+    assert(speed == 100);
+    assert(defense == 100);
+    assert(pop_cap == 1000);
+}
+
+#[test]
+fn test_artifact_bonus_wormhole() {
+    // Artifact 5 = WORMHOLE (Range * 2)
+    let (range, _, _, _, _, _, _) = get_effective_stats(
+        100, 100, 100,
+        1000, 10,
+        500, 5,
+        0, 0, 0,
+        0, 5
+    );
+    assert(range == 200);
+}
+
+#[test]
+fn test_artifact_bonus_monolith() {
+    // Artifact 1 = MONOLITH (Pop Cap * 1.5)
+    let (_, _, _, pop_cap, pop_growth, _, _) = get_effective_stats(
+        100, 100, 100,
+        10000, 100,
+        500, 5,
+        0, 0, 0,
+        0, 1
+    );
+    assert(pop_cap == 15000);
+    assert(pop_growth == 150);
+}
+
+
