@@ -117,14 +117,9 @@ pub fn get_effective_stats(
 }
 
 /// Check if a planet can be upgraded on a specific branch
-pub fn can_upgrade_planet(level: u8, current_upgrade_level: u8) -> bool {
-    // Check planet level (must be > 0 to upgrade)
-    if level == 0 {
-        false
-    } else {
-        // Max upgrade level is 4
-        current_upgrade_level < 4
-    }
+pub fn can_upgrade_planet(_level: u8, current_upgrade_level: u8) -> bool {
+    // Max upgrade level is 4
+    current_upgrade_level < 4
 }
 
 /// Calculate the silver cost for upgrading

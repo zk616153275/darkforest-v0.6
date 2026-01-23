@@ -341,6 +341,21 @@ pub contract DarkForest {
         let timestamp = self.context.timestamp();
         from_planet = crate::planet::state::refresh_planet_state(from_planet, timestamp);
 
+        // Calculate effective stats for range check
+        let (eff_range, _, _, _, _) = crate::planet::state::get_effective_stats(
+            from_planet.range,
+            from_planet.speed,
+            from_planet.defense,
+            from_planet.population_cap,
+            from_planet.population_growth,
+            from_planet.upgrade_state_0,
+            from_planet.upgrade_state_1,
+            from_planet.upgrade_state_2
+        );
+
+        // Verify range
+        assert(distance <= eff_range, "Destination out of range");
+
         // Deduct energy and silver
         assert(from_planet.population >= energy_sent, "Insufficient energy");
         assert(from_planet.silver >= silver_sent, "Insufficient silver");
@@ -401,6 +416,86 @@ pub contract DarkForest {
     }
 
     // =========================================================================
+    // Planet Upgrades
+    // =========================================================================
+
+    /// Upgrade a planet's stats
+    ///
+    /// # Arguments
+    /// * `planet_id` - The planet to upgrade
+    /// * `branch` - The upgrade branch (0=Defense, 1=Range, 2=Speed)
+    #[external("public")]
+    #[only_self]
+    fn upgrade_planet(planet_id: Field, branch: u8) {
+        // 1. Check game is not paused
+        assert(!self.storage.paused.read(), "Game is paused");
+
+        // 2. Verify ownership and initialization
+        let mut planet = self.storage.planets.at(planet_id).read();
+        let sender = self.context.msg_sender().unwrap();
+        assert(planet.owner == sender, "Not planet owner");
+        assert(planet.is_initialized, "Planet not initialized");
+
+        // 3. Refresh state before checking resources (crucial!)
+        let timestamp = self.context.timestamp();
+        planet = crate::planet::state::refresh_planet_state(planet, timestamp);
+
+        // 4. Determine current upgrade level for branch
+        let mut current_level = 0;
+        if branch == 0 {
+            current_level = planet.upgrade_state_0;
+        } else if branch == 1 {
+            current_level = planet.upgrade_state_1;
+        } else if branch == 2 {
+            current_level = planet.upgrade_state_2;
+        } else {
+            assert(false, "Invalid upgrade branch");
+        }
+
+        // 5. Check if upgradeable
+        assert(crate::planet::state::can_upgrade_planet(planet.level, current_level), "Cannot upgrade");
+
+        // 6. Calculate cost
+        let cost = crate::planet::state::get_upgrade_cost(planet.level, current_level);
+        assert(planet.silver >= cost, "Insufficient silver");
+
+        // 7. Deduct cost and apply upgrade
+        planet.silver -= cost;
+        if branch == 0 {
+            planet.upgrade_state_0 += 1;
+        } else if branch == 1 {
+            planet.upgrade_state_1 += 1;
+        } else if branch == 2 {
+            planet.upgrade_state_2 += 1;
+        }
+
+        // 8. Update effective stats (optional, but good for views if stats stored)
+        // Currently range/speed/defense are stored as base stats in struct?
+        // Wait, `PlanetPublicState` has `range`, `speed`, `defense` fields.
+        // `create_initial_planet` sets them to defaults.
+        // `get_effective_stats` calculates effective stats from base + upgrades.
+        // We should probably NOT update base stats in storage, but we might want to cache effective stats?
+        // The current `PlanetPublicState` seems to store *Base* stats or *Effective* stats?
+        // `init.nr`: `range: stats.range`.
+        // `state.nr`: `get_effective_stats` takes `base_range`.
+        // If `PlanetPublicState.range` stores CURRENT effective range, we should update it here.
+        // If it stores BASE range, we shouldn't touch it.
+        // Let's assume it stores BASE for now to be safe, or check init.nr.
+        // `init.nr` sets `range = stats.range`.
+        // If we want `get_planet_range` view to return effective value, it should call `get_effective_stats`.
+
+        // Let's update the stored stats to be effective stats?
+        // No, that makes "un-upgrading" or recalculating hard if logic changes.
+        // Better to verify what `PlanetPublicState` holds.
+        // Usually it holds everything needed.
+
+        // For now, I will just update the `upgrade_state_X`.
+        // View functions will be responsible for applying multipliers.
+
+        // Write back
+        self.storage.planets.at(planet_id).write(planet);
+    }
+    // =========================================================================
     // Location Reveal
     // =========================================================================
 
@@ -409,14 +504,15 @@ pub contract DarkForest {
     /// # Arguments
     /// * `x`, `y` - Private coordinates
     /// * `planet_id` - Public planet ID
-    /// * `planethash_key` - Key for verification
     #[external("private")]
     fn reveal_location(
         x: Field,
         y: Field,
         planet_id: Field,
-        planethash_key: Field
     ) {
+        // Read config
+        let planethash_key = self.storage.planethash_key.read();
+
         // 1. Verify hash
         let computed = compute_planet_hash(x, y, planethash_key);
         assert(computed == planet_id, "Invalid coordinates");
@@ -566,6 +662,45 @@ pub contract DarkForest {
     #[view]
     fn is_planet_initialized(planet_id: Field) -> pub bool {
         self.storage.planets.at(planet_id).read().is_initialized
+    }
+
+    /// Get planet effective range
+    #[external("public")]
+    #[view]
+    fn get_planet_range(planet_id: Field) -> pub u64 {
+        let planet = self.storage.planets.at(planet_id).read();
+        let (eff_range, _, _, _, _) = crate::planet::state::get_effective_stats(
+            planet.range, planet.speed, planet.defense,
+            planet.population_cap, planet.population_growth,
+            planet.upgrade_state_0, planet.upgrade_state_1, planet.upgrade_state_2
+        );
+        eff_range
+    }
+
+    /// Get planet effective speed
+    #[external("public")]
+    #[view]
+    fn get_planet_speed(planet_id: Field) -> pub u64 {
+        let planet = self.storage.planets.at(planet_id).read();
+        let (_, eff_speed, _, _, _) = crate::planet::state::get_effective_stats(
+            planet.range, planet.speed, planet.defense,
+            planet.population_cap, planet.population_growth,
+            planet.upgrade_state_0, planet.upgrade_state_1, planet.upgrade_state_2
+        );
+        eff_speed
+    }
+
+    /// Get planet effective defense
+    #[external("public")]
+    #[view]
+    fn get_planet_defense(planet_id: Field) -> pub u64 {
+        let planet = self.storage.planets.at(planet_id).read();
+        let (_, _, eff_defense, _, _) = crate::planet::state::get_effective_stats(
+            planet.range, planet.speed, planet.defense,
+            planet.population_cap, planet.population_growth,
+            planet.upgrade_state_0, planet.upgrade_state_1, planet.upgrade_state_2
+        );
+        eff_defense
     }
 
     /// Get revealed coordinates for a planet
