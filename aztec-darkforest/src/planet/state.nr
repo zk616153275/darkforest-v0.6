@@ -64,6 +64,10 @@ pub fn calculate_time_elapsed(current_timestamp: u64, last_updated: u64) -> u64 
 pub fn refresh_planet_state(
     mut state: PlanetPublicState,
     timestamp: u64,
+    effective_pop_cap: u64,
+    effective_pop_growth: u64,
+    effective_silver_cap: u64,
+    effective_silver_growth: u64,
 ) -> PlanetPublicState {
     let time_elapsed = calculate_time_elapsed(timestamp, state.last_updated);
 
@@ -71,16 +75,16 @@ pub fn refresh_planet_state(
         // Update population
         state.population = calculate_population_after_growth(
             state.population,
-            state.population_growth,
-            state.population_cap,
+            effective_pop_growth,
+            effective_pop_cap,
             time_elapsed
         );
 
         // Update silver
         state.silver = calculate_silver_after_growth(
             state.silver,
-            state.silver_growth,
-            state.silver_cap,
+            effective_silver_growth,
+            effective_silver_cap,
             time_elapsed
         );
 
@@ -91,29 +95,65 @@ pub fn refresh_planet_state(
     state
 }
 
-/// Get planet's current effective stats (after applying upgrades)
-/// Returns: (range, speed, defense, pop_cap, pop_growth)
+/// Get planet's current effective stats (after applying upgrades and artifacts)
+/// Returns: (range, speed, defense, pop_cap, pop_growth, silver_cap, silver_growth)
 pub fn get_effective_stats(
     base_range: u64,
     base_speed: u64,
     base_defense: u64,
-    population_cap: u64,
-    population_growth: u64,
+    base_pop_cap: u64,
+    base_pop_growth: u64,
+    base_silver_cap: u64,
+    base_silver_growth: u64,
     upgrade_state_0: u8,
     upgrade_state_1: u8,
     upgrade_state_2: u8,
-) -> (u64, u64, u64, u64, u64) {
-    // Apply upgrade multipliers
+    hat_level: u8,
+    artifact_type: u8,
+) -> (u64, u64, u64, u64, u64, u64, u64) {
+    // 1. Apply upgrade multipliers (Base + Upgrades)
     // Each upgrade level adds 20%
     let range_mult = 100 + (upgrade_state_0 as u64 * 20);
     let speed_mult = 100 + (upgrade_state_1 as u64 * 20);
     let defense_mult = 100 + (upgrade_state_2 as u64 * 20);
 
-    let effective_range = (base_range * range_mult) / 100;
-    let effective_speed = (base_speed * speed_mult) / 100;
-    let effective_defense = (base_defense * defense_mult) / 100;
+    let mut eff_range = (base_range * range_mult) / 100;
+    let mut eff_speed = (base_speed * speed_mult) / 100;
+    let mut eff_defense = (base_defense * defense_mult) / 100;
 
-    (effective_range, effective_speed, effective_defense, population_cap, population_growth)
+    // Hat level bonus (cosmetic but maybe small stat boost?)
+    if hat_level > 0 {
+       // e.g. 10% pop cap per hat level?
+       // Leaving cosmetic for now.
+    }
+
+    let mut eff_pop_cap = base_pop_cap;
+    let mut eff_pop_growth = base_pop_growth;
+    let mut eff_silver_cap = base_silver_cap;
+    let mut eff_silver_growth = base_silver_growth;
+
+    // 2. Apply Artifact Bonuses
+    if artifact_type == 1 { // MONOLITH
+        eff_pop_cap = (eff_pop_cap * 150) / 100;
+        eff_pop_growth = (eff_pop_growth * 150) / 100;
+    } else if artifact_type == 2 { // COLOSSUS
+        eff_defense = (eff_defense * 150) / 100;
+    } else if artifact_type == 3 { // SPACESHIP
+        eff_speed = (eff_speed * 150) / 100;
+    } else if artifact_type == 4 { // PYRAMID
+        eff_silver_cap = (eff_silver_cap * 150) / 100;
+        eff_silver_growth = (eff_silver_growth * 150) / 100;
+    } else if artifact_type == 5 { // WORMHOLE
+        eff_range = (eff_range * 200) / 100;
+    } else if artifact_type == 6 { // PLANETARY_SHIELD
+        eff_defense = (eff_defense * 200) / 100;
+    } else if artifact_type == 7 { // PHOTOID_CANNON
+        eff_speed = (eff_speed * 200) / 100;
+    } else if artifact_type == 8 { // BLOOM_FILTER
+        eff_range = (eff_range * 150) / 100;
+    }
+
+    (eff_range, eff_speed, eff_defense, eff_pop_cap, eff_pop_growth, eff_silver_cap, eff_silver_growth)
 }
 
 /// Check if a planet can be upgraded on a specific branch

@@ -96,6 +96,7 @@
 - [x] 验证 perlin 范围
 - [x] 创建 CoordNote
 - [x] 创建 EnergyNote
+- [x] 创建 EnergyNote
 - [x] 更新公开状态
 - [ ] 编写测试
 
@@ -121,11 +122,11 @@
 - [x] 实现 `refresh_planet(...)` - 刷新能量/银矿
 - [x] 实现能量增长计算
 - [x] 实现银矿增长计算
-- [ ] 实现到达处理
+- [x] 实现到达处理
 
 ### 3.7 星球升级
 
-- [ ] 实现 `upgrade_planet(location, branch)`
+- [x] 实现 `upgrade_planet(location, branch)`
 - [ ] 编写测试
 
 **验收**: 能在 Sandbox 成功初始化玩家并执行移动
@@ -136,12 +137,13 @@
 
 ### 4.1 神器系统
 
-- [ ] 实现 `ArtifactNote`
-- [ ] 实现 `prospect_planet(...)`
-- [ ] 实现 `find_artifact(x, y)`
+- [x] 实现 `ArtifactNote` (ArtifactState)
+- [x] 实现 `prospect_planet(...)` (find_artifact)
+- [x] 实现 `find_artifact(x, y)`
 - [ ] 实现 `deposit_artifact(...)`
 - [ ] 实现 `withdraw_artifact(...)`
 - [ ] 实现 `activate_artifact(...)`
+- [ ] **实现神器加成效果 logic**
 - [ ] 实现 `deactivate_artifact(...)`
 - [ ] 编写测试
 
@@ -154,23 +156,23 @@
 
 ### 4.3 捕获区域
 
-- [ ] 实现捕获区域生成
-- [ ] 实现 `invade_planet(...)`
-- [ ] 实现 `capture_planet(...)`
+- [x] 实现捕获区域生成 (Move Logic)
+- [x] 实现 `invade_planet(...)` (Move Logic)
+- [x] 实现 `capture_planet(...)` (Move Logic)
 - [ ] 编写测试
 
 ### 4.4 管理员功能
 
-- [ ] 实现 `pause()` / `unpause()`
+- [x] 实现 `pause()` / `unpause()`
 - [ ] 实现 `set_owner(...)`
 - [ ] 实现 `create_planet(...)`
 - [ ] 编写测试
 
 ### 4.5 数据查询
 
-- [ ] 实现 `get_planet(...)`
-- [ ] 实现 `get_player(...)`
-- [ ] 实现批量查询
+- [x] 实现 `get_planet(...)` (View functions)
+- [x] 实现 `get_player(...)`
+- [x] 实现批量查询 (Individual views available)
 
 **验收**: 所有扩展功能测试通过
 

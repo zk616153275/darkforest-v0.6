@@ -393,24 +393,33 @@ pub contract DarkForest {
         assert(from_planet.owner == sender, "Not planet owner");
         assert(from_planet.is_initialized, "Source planet not initialized");
 
-        // Refresh source planet state
-        let timestamp = self.context.timestamp();
-        from_planet = crate::planet::state::refresh_planet_state(from_planet, timestamp);
+        // ---------------------------------------------------------
+        // Refresh Source Planet with Artifacts
+        // ---------------------------------------------------------
+        let from_artifact_id = self.storage.planet_artifact.at(from_planet_id).read();
+        let mut from_artifact_type = 0;
+        if from_artifact_id != 0 {
+             let art = self.storage.artifacts.at(from_artifact_id).read();
+             from_artifact_type = art.artifact_type;
+        }
 
-        // Calculate effective stats for range check
-        let (eff_range, _, _, _, _) = crate::planet::state::get_effective_stats(
-            from_planet.range,
-            from_planet.speed,
-            from_planet.defense,
-            from_planet.population_cap,
-            from_planet.population_growth,
-            from_planet.upgrade_state_0,
-            from_planet.upgrade_state_1,
-            from_planet.upgrade_state_2
+        let (src_range, _, _, src_pop_cap, src_pop_growth, src_silver_cap, src_silver_growth) =
+            crate::planet::state::get_effective_stats(
+                from_planet.range, from_planet.speed, from_planet.defense,
+                from_planet.population_cap, from_planet.population_growth,
+                from_planet.silver_cap, from_planet.silver_growth,
+                from_planet.upgrade_state_0, from_planet.upgrade_state_1, from_planet.upgrade_state_2,
+                from_planet.hat_level, from_artifact_type
+            );
+
+        let timestamp = self.context.timestamp();
+        from_planet = crate::planet::state::refresh_planet_state(
+            from_planet, timestamp,
+            src_pop_cap, src_pop_growth, src_silver_cap, src_silver_growth
         );
 
         // Verify range
-        assert(distance <= eff_range, "Destination out of range");
+        assert(distance <= src_range, "Destination out of range");
 
         // Deduct energy and silver
         assert(from_planet.population >= energy_sent, "Insufficient energy");
@@ -422,51 +431,85 @@ pub contract DarkForest {
         // Write back source planet
         self.storage.planets.at(from_planet_id).write(from_planet);
 
-        // 3. Initialize destination planet if needed (as unowned planet)
-        let to_planet = self.storage.planets.at(to_planet_id).read();
-        if !to_planet.is_initialized {
-            // Planet not initialized yet - created unowned planet
+        // ---------------------------------------------------------
+        // Destination Planet Logic (Arrival)
+        // ---------------------------------------------------------
 
-            // Calculate Space Type
+        // Initialize if empty
+        let mut to_planet = self.storage.planets.at(to_planet_id).read();
+        if !to_planet.is_initialized {
             let t1 = self.storage.perlin_threshold_1.read();
             let t2 = self.storage.perlin_threshold_2.read();
             let t3 = self.storage.perlin_threshold_3.read();
             let space_type = crate::types::enums::get_space_type_from_perlin(to_perlin, t1, t2, t3);
 
-            // Level 0 for unowned planets
-            let level = 0;
-            let timestamp = self.context.timestamp();
-
-            let new_to_planet = crate::planet::init::create_unowned_planet(
-                to_planet_id,
-                level,
-                space_type,
-                to_perlin,
-                timestamp
+            to_planet = crate::planet::init::create_unowned_planet(
+                to_planet_id, 0, space_type, to_perlin, timestamp
             );
-
-            self.storage.planets.at(to_planet_id).write(new_to_planet);
-
-            // Increment planet count for new discovery
-            let planet_count = self.storage.planet_count.read();
-            self.storage.planet_count.write(planet_count + 1);
+            self.storage.planet_count.write(self.storage.planet_count.read() + 1);
         }
 
-        // 5. Store arrival information for later processing
-        // Note: In a full implementation, we would store arrivals in a queue
-        // and process them based on travel time. For now, we just validate.
+        // Refresh Destination
+        let to_artifact_id = self.storage.planet_artifact.at(to_planet_id).read();
+        let mut to_artifact_type = 0;
+        if to_artifact_id != 0 {
+             let art = self.storage.artifacts.at(to_artifact_id).read();
+             to_artifact_type = art.artifact_type;
+        }
 
-        // Basic validations
-        assert(energy_sent > 0, "Must send some energy");
-        assert(distance > 0, "Cannot move to same planet");
+        let (_, _, dest_defense, dest_pop_cap, dest_pop_growth, dest_silver_cap, dest_silver_growth) =
+            crate::planet::state::get_effective_stats(
+                to_planet.range, to_planet.speed, to_planet.defense,
+                to_planet.population_cap, to_planet.population_growth,
+                to_planet.silver_cap, to_planet.silver_growth,
+                to_planet.upgrade_state_0, to_planet.upgrade_state_1, to_planet.upgrade_state_2,
+                to_planet.hat_level, to_artifact_type
+            );
 
-        // Note: Full arrival processing would include:
-        // - Calculate travel time based on distance and speed
-        // - Store arrival in pending arrivals queue
-        // - Process arrival when travel time elapses
+        to_planet = crate::planet::state::refresh_planet_state(
+            to_planet, timestamp,
+            dest_pop_cap, dest_pop_growth, dest_silver_cap, dest_silver_growth
+        );
 
-        // For now, just emit that a move was initiated
-        // The _distance and _silver_sent are used for future implementation
+        // Apply Arrival Logic
+        // Simple instant arrival (no decay for MVP)
+        let arriving_energy = energy_sent;
+
+        if to_planet.owner == sender {
+            // Reinforce
+            let mut new_pop = to_planet.population + arriving_energy;
+            if new_pop > dest_pop_cap { new_pop = dest_pop_cap; }
+            to_planet.population = new_pop;
+
+            let mut new_silver = to_planet.silver + silver_sent;
+            if new_silver > dest_silver_cap { new_silver = dest_silver_cap; }
+            to_planet.silver = new_silver;
+        } else {
+            // Attack
+            // Defense bonus applies to population
+            let effective_defense_pop = (to_planet.population * dest_defense) / 100;
+
+            if arriving_energy > effective_defense_pop {
+                // Conquered!
+                to_planet.owner = sender;
+                to_planet.population = arriving_energy - effective_defense_pop;
+                // Cap? Usually conquest sets low pop?
+                if to_planet.population > dest_pop_cap { to_planet.population = dest_pop_cap; }
+
+                // Loot silver? Usually percentage
+                to_planet.silver = to_planet.silver / 2; // simplified looot
+            } else {
+                // Defended
+                let damage = (arriving_energy * 100) / dest_defense;
+                if damage > to_planet.population {
+                    to_planet.population = 0;
+                } else {
+                    to_planet.population -= damage;
+                }
+            }
+        }
+
+        self.storage.planets.at(to_planet_id).write(to_planet);
 
         self.context.emit_public_log(
             PlanetMoved {
@@ -500,8 +543,27 @@ pub contract DarkForest {
         assert(planet.is_initialized, "Planet not initialized");
 
         // 3. Refresh state before checking resources (crucial!)
+        let artifact_id = self.storage.planet_artifact.at(planet_id).read();
+        let mut artifact_type = 0;
+        if artifact_id != 0 {
+             let art = self.storage.artifacts.at(artifact_id).read();
+             artifact_type = art.artifact_type;
+        }
+
+        let (_, _, _, pop_cap, pop_growth, silver_cap, silver_growth) =
+            crate::planet::state::get_effective_stats(
+                planet.range, planet.speed, planet.defense,
+                planet.population_cap, planet.population_growth,
+                planet.silver_cap, planet.silver_growth,
+                planet.upgrade_state_0, planet.upgrade_state_1, planet.upgrade_state_2,
+                planet.hat_level, artifact_type
+            );
+
         let timestamp = self.context.timestamp();
-        planet = crate::planet::state::refresh_planet_state(planet, timestamp);
+        planet = crate::planet::state::refresh_planet_state(
+            planet, timestamp,
+            pop_cap, pop_growth, silver_cap, silver_growth
+        );
 
         // 4. Determine current upgrade level for branch
         let mut current_level = 0;
@@ -615,8 +677,21 @@ pub contract DarkForest {
         assert(!planet.has_tried_finding_artifact, "Already searched this planet");
 
         // 3. Refresh state
+        // Initial find: No artifact yet
+        let (_, _, _, pop_cap, pop_growth, silver_cap, silver_growth) =
+            crate::planet::state::get_effective_stats(
+                planet.range, planet.speed, planet.defense,
+                planet.population_cap, planet.population_growth,
+                planet.silver_cap, planet.silver_growth,
+                planet.upgrade_state_0, planet.upgrade_state_1, planet.upgrade_state_2,
+                planet.hat_level, 0
+            );
+
         let timestamp = self.context.timestamp();
-        planet = crate::planet::state::refresh_planet_state(planet, timestamp);
+        planet = crate::planet::state::refresh_planet_state(
+            planet, timestamp,
+            pop_cap, pop_growth, silver_cap, silver_growth
+        );
 
         // 4. Calculate cost (50% of max population)
         let cost = planet.population_cap / 2;
@@ -858,10 +933,20 @@ pub contract DarkForest {
     #[view]
     fn get_planet_range(planet_id: Field) -> pub u64 {
         let planet = self.storage.planets.at(planet_id).read();
-        let (eff_range, _, _, _, _) = crate::planet::state::get_effective_stats(
+
+        let artifact_id = self.storage.planet_artifact.at(planet_id).read();
+        let mut artifact_type = 0;
+        if artifact_id != 0 {
+             let art = self.storage.artifacts.at(artifact_id).read();
+             artifact_type = art.artifact_type;
+        }
+
+        let (eff_range, _, _, _, _, _, _) = crate::planet::state::get_effective_stats(
             planet.range, planet.speed, planet.defense,
             planet.population_cap, planet.population_growth,
-            planet.upgrade_state_0, planet.upgrade_state_1, planet.upgrade_state_2
+            planet.silver_cap, planet.silver_growth,
+            planet.upgrade_state_0, planet.upgrade_state_1, planet.upgrade_state_2,
+            planet.hat_level, artifact_type
         );
         eff_range
     }
@@ -871,10 +956,20 @@ pub contract DarkForest {
     #[view]
     fn get_planet_speed(planet_id: Field) -> pub u64 {
         let planet = self.storage.planets.at(planet_id).read();
-        let (_, eff_speed, _, _, _) = crate::planet::state::get_effective_stats(
+
+        let artifact_id = self.storage.planet_artifact.at(planet_id).read();
+        let mut artifact_type = 0;
+        if artifact_id != 0 {
+             let art = self.storage.artifacts.at(artifact_id).read();
+             artifact_type = art.artifact_type;
+        }
+
+        let (_, eff_speed, _, _, _, _, _) = crate::planet::state::get_effective_stats(
             planet.range, planet.speed, planet.defense,
             planet.population_cap, planet.population_growth,
-            planet.upgrade_state_0, planet.upgrade_state_1, planet.upgrade_state_2
+            planet.silver_cap, planet.silver_growth,
+            planet.upgrade_state_0, planet.upgrade_state_1, planet.upgrade_state_2,
+            planet.hat_level, artifact_type
         );
         eff_speed
     }
@@ -884,10 +979,20 @@ pub contract DarkForest {
     #[view]
     fn get_planet_defense(planet_id: Field) -> pub u64 {
         let planet = self.storage.planets.at(planet_id).read();
-        let (_, _, eff_defense, _, _) = crate::planet::state::get_effective_stats(
+
+        let artifact_id = self.storage.planet_artifact.at(planet_id).read();
+        let mut artifact_type = 0;
+        if artifact_id != 0 {
+             let art = self.storage.artifacts.at(artifact_id).read();
+             artifact_type = art.artifact_type;
+        }
+
+        let (_, _, eff_defense, _, _, _, _) = crate::planet::state::get_effective_stats(
             planet.range, planet.speed, planet.defense,
             planet.population_cap, planet.population_growth,
-            planet.upgrade_state_0, planet.upgrade_state_1, planet.upgrade_state_2
+            planet.silver_cap, planet.silver_growth,
+            planet.upgrade_state_0, planet.upgrade_state_1, planet.upgrade_state_2,
+            planet.hat_level, artifact_type
         );
         eff_defense
     }
