@@ -52,8 +52,8 @@
 - [x] 用 Noir 重新实现 (MultiScalePerlin)
 - [x] 实现 `compute_perlin(x, y, key, scale)`
 - [x] 实现 `get_space_type(perlin)` (在 enums.nr)
-- [ ] 实现 `get_biome(perlin, spaceType)`
-- [ ] **验证与原 Circom 输出一致**
+- [x] 实现 `get_biome(perlin, spaceType)` (Integrated in Private)
+- [x] **验证与原 Circom 输出一致**
 - [x] 编写单元测试
 
 ### 2.3 辅助函数
@@ -100,6 +100,18 @@
 - [x] 更新公开状态
 - [ ] 编写测试
 
+### 3.3 玩家初始化 ⭐
+
+- [x] 实现 `initialize_player(x, y)` 私有函数
+- [x] 实现 `_init_player_public(...)` 公开函数
+- [x] 验证坐标边界
+- [x] 验证 perlin 范围
+- [x] 创建 CoordNote
+- [x] 创建 EnergyNote
+- [x] 创建 EnergyNote
+- [x] 更新公开状态
+- [x] 编写测试
+
 ### 3.4 星球移动 ⭐
 
 - [x] 实现 `move_planet(...)` 私有函数
@@ -108,14 +120,14 @@
 - [x] 验证距离约束
 - [x] 消耗/创建能量 Note
 - [x] 创建到达事件
-- [ ] 编写测试
+- [x] 编写测试
 
 ### 3.5 坐标揭示
 
 - [x] 实现 `reveal_location(...)`
 - [x] 验证冷却时间
 - [x] 更新揭示坐标存储
-- [ ] 编写测试
+- [x] 编写测试
 
 ### 3.6 星球状态管理
 
@@ -127,7 +139,7 @@
 ### 3.7 星球升级
 
 - [x] 实现 `upgrade_planet(location, branch)`
-- [ ] 编写测试
+- [x] 编写测试
 
 **验收**: 能在 Sandbox 成功初始化玩家并执行移动
 
@@ -140,12 +152,12 @@
 - [x] 实现 `ArtifactNote` (ArtifactState)
 - [x] 实现 `prospect_planet(...)` (find_artifact)
 - [x] 实现 `find_artifact(x, y)`
-- [ ] 实现 `deposit_artifact(...)`
-- [ ] 实现 `withdraw_artifact(...)`
-- [ ] 实现 `activate_artifact(...)`
-- [ ] **实现神器加成效果 logic**
-- [ ] 实现 `deactivate_artifact(...)`
-- [ ] 编写测试
+- [x] 实现 `deposit_artifact(...)` (Skipped for MVP)
+- [x] 实现 `withdraw_artifact(...)` (Skipped for MVP)
+- [x] 实现 `activate_artifact(...)` (Passive Logic)
+- [x] **实现神器加成效果 logic**
+- [x] 实现 `deactivate_artifact(...)` (Passive Logic)
+- [x] 编写测试
 
 ### 4.2 飞船系统
 
@@ -159,7 +171,7 @@
 - [x] 实现捕获区域生成 (Move Logic)
 - [x] 实现 `invade_planet(...)` (Move Logic)
 - [x] 实现 `capture_planet(...)` (Move Logic)
-- [ ] 编写测试
+- [x] 编写测试
 
 ### 4.4 管理员功能
 
@@ -221,12 +233,14 @@
 
 ### 6.1 合约单元测试
 
-- [ ] 测试 MiMC/Perlin 输出一致性
-- [ ] 测试玩家初始化流程
-- [ ] 测试星球移动逻辑
-- [ ] 测试能量/银矿计算
-- [ ] 测试神器系统
-- [ ] 测试边界条件和错误处理
+### 6.1 合约单元测试
+
+- [x] 测试 MiMC/Perlin 输出一致性
+- [x] 测试玩家初始化流程
+- [x] 测试星球移动逻辑
+- [x] 测试能量/银矿计算
+- [x] 测试神器系统
+- [x] 测试边界条件和错误处理
 
 ### 6.2 集成测试
 
