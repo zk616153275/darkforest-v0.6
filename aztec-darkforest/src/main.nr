@@ -12,13 +12,54 @@ use aztec::macros::aztec;
 pub contract DarkForest {
     use aztec::{
         protocol_types::address::AztecAddress,
-        macros::{functions::{external, initializer, internal, view, only_self}, storage::storage},
+        macros::{functions::{external, initializer, internal, view, only_self}, storage::storage, events::event},
         state_vars::{public_mutable::PublicMutable, public_immutable::PublicImmutable, Map},
     };
 
     // Import utility functions
     use crate::utils::hash::compute_planet_hash;
     use crate::utils::perlin::compute_perlin;
+
+    // =========================================================================
+    // Events
+    // =========================================================================
+    #[event]
+    struct PlayerInitialized {
+        player: AztecAddress,
+        home_planet: Field,
+    }
+
+    #[event]
+    struct PlanetMoved {
+        from: Field,
+        to: Field,
+        owner: AztecAddress,
+        distance: u64,
+    }
+
+    #[event]
+    struct LocationRevealed {
+        planet_id: Field,
+        x: Field,
+        y: Field,
+        revealer: AztecAddress,
+    }
+
+    #[event]
+    struct PlanetUpgraded {
+        planet_id: Field,
+        branch: u8,
+        new_level: u8,
+    }
+
+    #[event]
+    struct ArtifactFound {
+        planet_id: Field,
+        artifact_id: Field,
+        artifact_type: u8,
+        rarity: u8,
+        discoverer: AztecAddress,
+    }
 
     // =========================================================================
     // Storage Structure
@@ -251,6 +292,14 @@ pub contract DarkForest {
 
         let planet_count = self.storage.planet_count.read();
         self.storage.planet_count.write(planet_count + 1);
+
+        // Emit Event
+        self.context.emit_public_log(
+            PlayerInitialized {
+                player: sender,
+                home_planet: planet_id,
+            }
+        );
     }
 
     // =========================================================================
@@ -418,8 +467,15 @@ pub contract DarkForest {
 
         // For now, just emit that a move was initiated
         // The _distance and _silver_sent are used for future implementation
-        let _ = distance;
-        let _ = silver_sent;
+
+        self.context.emit_public_log(
+            PlanetMoved {
+                from: from_planet_id,
+                to: to_planet_id,
+                owner: sender,
+                distance: distance,
+            }
+        );
     }
 
     // =========================================================================
@@ -501,6 +557,15 @@ pub contract DarkForest {
 
         // Write back
         self.storage.planets.at(planet_id).write(planet);
+
+        // Emit Event
+        self.context.emit_public_log(
+            PlanetUpgraded {
+                planet_id: planet_id,
+                branch: branch,
+                new_level: current_level + 1,
+            }
+        );
     }
     // =========================================================================
     // Artifact Discovery
@@ -595,6 +660,17 @@ pub contract DarkForest {
             // Link storage
             self.storage.artifacts.at(new_artifact_id).write(artifact);
             self.storage.planet_artifact.at(planet_id).write(new_artifact_id);
+
+            // Emit Event
+            self.context.emit_public_log(
+                ArtifactFound {
+                    planet_id: planet_id,
+                    artifact_id: new_artifact_id,
+                    artifact_type: artifact_type,
+                    rarity: rarity,
+                    discoverer: sender,
+                }
+            );
         }
     }
 
@@ -653,6 +729,16 @@ pub contract DarkForest {
 
         // 3. Update player cooldown
         self.storage.player_last_reveal.at(sender).write(current_time);
+
+        // Emit Event
+        self.context.emit_public_log(
+            LocationRevealed {
+                planet_id: planet_id,
+                x: x,
+                y: y,
+                revealer: sender,
+            }
+        );
     }
 
     // =========================================================================
