@@ -2,3 +2,4 @@
 pub mod hash;
 pub mod perlin;
 pub mod math;
+pub mod random;

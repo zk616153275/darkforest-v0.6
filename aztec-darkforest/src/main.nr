@@ -216,6 +216,14 @@ pub contract DarkForest {
         assert(perlin >= init_perlin_min, "Perlin value too low for spawn");
         assert(perlin < init_perlin_max, "Perlin value too high for spawn");
 
+        // 5. Rim Spawn Check: dist^2 >= r^2 * 0.98
+        // User audit: "Circom: compLower.in <== rSq * 98"
+        // equivalent to 100 * dist^2 >= 98 * r^2
+        assert(
+            (dist_squared as u64) * 100 >= (radius_squared as u64) * 98,
+            "Spawn location too close to center"
+        );
+
         // 5. Get sender address for callback
         let sender = self.context.msg_sender().unwrap();
 
@@ -257,8 +265,8 @@ pub contract DarkForest {
         let space_type = crate::types::enums::get_space_type_from_perlin(perlin, t1, t2, t3);
 
         // 5. Determine Planet Level
-        // Note: Default to level 1 for home planets for MVP. Verify thresholds in future.
-        let level = 1;
+        // Note: Default to level 0 for home planets as per Solidity LibPlanet
+        let level = 0;
 
         // 6. Create Initial Planet State
         let timestamp = self.context.timestamp();

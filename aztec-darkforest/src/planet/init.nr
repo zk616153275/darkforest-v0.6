@@ -1,6 +1,6 @@
 // Planet initialization logic helpers
 
-use crate::types::planet::{PlanetPublicState, get_default_stats};
+use crate::types::planet::PlanetPublicState;
 use crate::types::enums::PlanetType;
 use dep::aztec::protocol_types::address::AztecAddress;
 
@@ -46,8 +46,32 @@ pub fn create_initial_planet(
     is_home_planet: bool,
     timestamp: u64,
 ) -> PlanetPublicState {
-    let stats = get_default_stats(level);
-    let initial_pop = if is_home_planet { INITIAL_POPULATION } else { 0 };
+    // For Home Planet, PlanetType is always PLANET (0)
+    // For others, it should be derived, but create_initial_planet assumes PLANET for now.
+    // TODO: Pass planet_type as argument if we want to support initialization of other types via move?
+    // Main.nr move_callback currently creates simple planets.
+
+    let stats = crate::types::planet::compute_modified_stats(planet_id, level, PlanetType::PLANET(), space_type);
+
+    let mut initial_pop = 0;
+    if is_home_planet {
+        initial_pop = INITIAL_POPULATION;
+    } else {
+        // Barbarian logic
+        // Base pirates
+        initial_pop = (stats.population_cap * stats.barbarian_percentage) / 100;
+
+        // Multipliers based on SpaceType (logic from LibGameUtils)
+        // Dead Space = 20x, Deep Space = 10x, Space = 4x
+        // Note: These must match SpaceType enum values
+        if space_type == 3 { // DEAD_SPACE
+            initial_pop = initial_pop * 20;
+        } else if space_type == 2 { // DEEP_SPACE
+            initial_pop = initial_pop * 10;
+        } else if space_type == 1 { // SPACE
+            initial_pop = initial_pop * 4;
+        }
+    }
 
     PlanetPublicState {
         planet_id,

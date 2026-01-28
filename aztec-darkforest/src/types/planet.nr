@@ -201,42 +201,87 @@ pub struct PlanetDefaultStats {
     pub barbarian_percentage: u64,
 }
 
-/// Get default stats for a planet level
-pub fn get_default_stats(level: u8) -> PlanetDefaultStats {
-    // TODO: Populate with actual game balance values
-    // These are placeholder values
-    if level == 0 {
-        PlanetDefaultStats {
-            population_cap: 100000,
-            population_growth: 417,
-            range: 99,
-            speed: 75,
-            defense: 400,
-            silver_growth: 9,
-            silver_cap: 1000,
-            barbarian_percentage: 0,
-        }
-    } else if level == 1 {
-        PlanetDefaultStats {
-            population_cap: 400000,
-            population_growth: 833,
-            range: 177,
-            speed: 75,
-            defense: 400,
-            silver_growth: 18,
-            silver_cap: 4000,
-            barbarian_percentage: 1,
-        }
-    } else {
-        PlanetDefaultStats {
-            population_cap: 100000,
-            population_growth: 417,
-            range: 99,
-            speed: 75,
-            defense: 400,
-            silver_growth: 9,
-            silver_cap: 1000,
-            barbarian_percentage: 0,
-        }
+/// Get base stats for a planet level (0-9)
+/// Mapped from LibGameUtils.sol _planetDefaultStats
+pub fn get_base_stats(level: u8) -> PlanetDefaultStats {
+    if level == 0 { PlanetDefaultStats { population_cap: 100000, population_growth: 417, range: 99, speed: 75, defense: 400, silver_growth: 9, silver_cap: 1000, barbarian_percentage: 0 } }
+    else if level == 1 { PlanetDefaultStats { population_cap: 400000, population_growth: 833, range: 177, speed: 75, defense: 400, silver_growth: 18, silver_cap: 4000, barbarian_percentage: 1 } }
+    else if level == 2 { PlanetDefaultStats { population_cap: 1600000, population_growth: 1667, range: 317, speed: 75, defense: 400, silver_growth: 35, silver_cap: 16000, barbarian_percentage: 5 } }
+    else if level == 3 { PlanetDefaultStats { population_cap: 6400000, population_growth: 3333, range: 567, speed: 75, defense: 400, silver_growth: 71, silver_cap: 64000, barbarian_percentage: 10 } }
+    else if level == 4 { PlanetDefaultStats { population_cap: 25600000, population_growth: 6667, range: 1013, speed: 75, defense: 400, silver_growth: 141, silver_cap: 256000, barbarian_percentage: 20 } }
+    else if level == 5 { PlanetDefaultStats { population_cap: 102400000, population_growth: 13333, range: 1812, speed: 75, defense: 400, silver_growth: 283, silver_cap: 1024000, barbarian_percentage: 40 } }
+    else if level == 6 { PlanetDefaultStats { population_cap: 409600000, population_growth: 26667, range: 3239, speed: 75, defense: 400, silver_growth: 566, silver_cap: 4096000, barbarian_percentage: 55 } }
+    else if level == 7 { PlanetDefaultStats { population_cap: 1638400000, population_growth: 53333, range: 5790, speed: 75, defense: 400, silver_growth: 1131, silver_cap: 16384000, barbarian_percentage: 70 } }
+    else if level == 8 { PlanetDefaultStats { population_cap: 6553600000, population_growth: 106667, range: 10352, speed: 75, defense: 400, silver_growth: 2263, silver_cap: 65536000, barbarian_percentage: 80 } }
+    else { PlanetDefaultStats { population_cap: 26214400000, population_growth: 213333, range: 18503, speed: 75, defense: 400, silver_growth: 4525, silver_cap: 262144000, barbarian_percentage: 90 } }
+}
+
+use crate::utils::random;
+use crate::types::enums::{PlanetType, SpaceType};
+
+/// Compute final stats for a planet based on its properties
+/// Corresponds to LibGameUtils.sol#_defaultPlanet logic
+pub fn compute_modified_stats(
+    planet_id: Field,
+    level: u8,
+    planet_type: u8,
+    space_type: u8
+) -> PlanetDefaultStats {
+    let mut stats = get_base_stats(level);
+
+    // 1. Apply Boosts
+    if random::is_pop_cap_boost(planet_id) { stats.population_cap = stats.population_cap * 2; }
+    if random::is_pop_gro_boost(planet_id) { stats.population_growth = stats.population_growth * 2; }
+    if random::is_range_boost(planet_id) { stats.range = stats.range * 2; }
+    if random::is_speed_boost(planet_id) { stats.speed = stats.speed * 2; }
+    if random::is_def_boost(planet_id) { stats.defense = stats.defense * 2; }
+
+    // 2. Apply Space Type Modifiers
+    if space_type == SpaceType::DEAD_SPACE() {
+        // Dead Space: Buffs x2, Defense 0.15x
+        stats.range = stats.range * 2;
+        stats.speed = stats.speed * 2;
+        stats.population_cap = stats.population_cap * 2;
+        stats.population_growth = stats.population_growth * 2;
+        stats.silver_cap = stats.silver_cap * 2;
+        stats.silver_growth = stats.silver_growth * 2;
+        stats.defense = (stats.defense * 3) / 20;
+    } else if space_type == SpaceType::DEEP_SPACE() {
+        // Deep Space: Buffs 1.5x, Defense 0.25x
+        stats.range = (stats.range * 3) / 2;
+        stats.speed = (stats.speed * 3) / 2;
+        stats.population_cap = (stats.population_cap * 3) / 2;
+        stats.population_growth = (stats.population_growth * 3) / 2;
+        stats.silver_cap = (stats.silver_cap * 3) / 2;
+        stats.silver_growth = (stats.silver_growth * 3) / 2;
+        stats.defense = stats.defense / 4;
+    } else if space_type == SpaceType::SPACE() {
+        // Space: Buffs 1.25x, Defense 0.5x
+        stats.range = (stats.range * 5) / 4;
+        stats.speed = (stats.speed * 5) / 4;
+        stats.population_cap = (stats.population_cap * 5) / 4;
+        stats.population_growth = (stats.population_growth * 5) / 4;
+        stats.silver_cap = (stats.silver_cap * 5) / 4;
+        stats.silver_growth = (stats.silver_growth * 5) / 4;
+        stats.defense = stats.defense / 2;
     }
+
+    // 3. Apply Planet Type Modifiers
+    if planet_type == PlanetType::SILVER_MINE() {
+        stats.silver_cap = stats.silver_cap * 2;
+        stats.defense = stats.defense / 2;
+        stats.silver_growth = stats.silver_growth; // Explicitly kept same in Sol
+    } else if planet_type == PlanetType::SILVER_BANK() {
+        stats.speed = stats.speed / 2;
+        stats.silver_cap = stats.silver_cap * 10;
+        stats.population_growth = 0;
+        stats.population_cap = stats.population_cap * 5;
+    } else if planet_type == PlanetType::TRADING_POST() {
+        stats.defense = stats.defense / 2;
+        stats.silver_cap = stats.silver_cap * 2;
+    }
+
+    // Note: Population calculation (barbarians) is handled in init.nr using these stats
+
+    stats
 }
