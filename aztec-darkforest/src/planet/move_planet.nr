@@ -56,3 +56,56 @@ pub fn calculate_distance(from_x: i64, from_y: i64, to_x: i64, to_y: i64) -> u64
 pub fn is_within_range(distance: u64, range: u64) -> bool {
     distance <= range * 2
 }
+
+/// Apply a single arrival's effect on a planet (pure logic, no storage)
+///
+/// Returns (updated_planet, arrival_processed)
+/// - updated_planet: the planet after applying the arrival
+/// - arrival_processed: true if arrival was processed (time reached), false if pending
+pub fn apply_arrival(
+    mut planet: crate::types::planet::PlanetPublicState,
+    arrival: crate::types::arrival::ArrivalData,
+    timestamp: u64,
+    defense: u64,
+    pop_cap: u64,
+    silver_cap: u64,
+) -> (crate::types::planet::PlanetPublicState, bool) {
+    let mut processed = false;
+
+    if arrival.arrival_time <= timestamp {
+        processed = true;
+
+        // Process the arrival
+        if arrival.player == planet.owner {
+            // Reinforce
+            let mut new_pop = planet.population + arrival.pop_arriving;
+            if new_pop > pop_cap { new_pop = pop_cap; }
+            planet.population = new_pop;
+
+            let mut new_silver = planet.silver + arrival.silver_moved;
+            if new_silver > silver_cap { new_silver = silver_cap; }
+            planet.silver = new_silver;
+        } else {
+            // Attack
+            let effective_defense_pop = (planet.population * defense) / 100;
+
+            if arrival.pop_arriving > effective_defense_pop {
+                // Conquered!
+                planet.owner = arrival.player;
+                planet.population = arrival.pop_arriving - effective_defense_pop;
+                if planet.population > pop_cap { planet.population = pop_cap; }
+                planet.silver = planet.silver / 2;
+            } else {
+                // Defended
+                let damage = (arrival.pop_arriving * 100) / defense;
+                if damage > planet.population {
+                    planet.population = 0;
+                } else {
+                    planet.population -= damage;
+                }
+            }
+        }
+    }
+
+    (planet, processed)
+}

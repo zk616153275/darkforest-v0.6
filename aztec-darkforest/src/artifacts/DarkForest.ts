@@ -127,7 +127,7 @@ export class DarkForestContract extends ContractBase {
   }
   
 
-  public static get storage(): ContractStorageLayout<'admin' | 'paused' | 'world_radius' | 'planethash_key' | 'spacetype_key' | 'perlin_length_scale' | 'init_perlin_min' | 'init_perlin_max' | 'perlin_threshold_1' | 'perlin_threshold_2' | 'perlin_threshold_3' | 'planet_count' | 'player_count' | 'artifact_count' | 'artifacts' | 'planet_artifact' | 'players' | 'planets' | 'revealed_x' | 'revealed_y' | 'revealed_revealer'> {
+  public static get storage(): ContractStorageLayout<'admin' | 'paused' | 'world_radius' | 'planethash_key' | 'spacetype_key' | 'perlin_length_scale' | 'init_perlin_min' | 'init_perlin_max' | 'perlin_threshold_1' | 'perlin_threshold_2' | 'perlin_threshold_3' | 'planet_count' | 'player_count' | 'artifact_count' | 'artifacts' | 'planet_artifact' | 'players' | 'planets' | 'revealed_x' | 'revealed_y' | 'revealed_revealer' | 'arrival_count' | 'arrivals' | 'planet_arrival_count' | 'planet_arrivals'> {
       return {
         admin: {
       slot: new Fr(1n),
@@ -191,8 +191,20 @@ revealed_y: {
     },
 revealed_revealer: {
       slot: new Fr(30n),
+    },
+arrival_count: {
+      slot: new Fr(31n),
+    },
+arrivals: {
+      slot: new Fr(32n),
+    },
+planet_arrival_count: {
+      slot: new Fr(33n),
+    },
+planet_arrivals: {
+      slot: new Fr(34n),
     }
-      } as ContractStorageLayout<'admin' | 'paused' | 'world_radius' | 'planethash_key' | 'spacetype_key' | 'perlin_length_scale' | 'init_perlin_min' | 'init_perlin_max' | 'perlin_threshold_1' | 'perlin_threshold_2' | 'perlin_threshold_3' | 'planet_count' | 'player_count' | 'artifact_count' | 'artifacts' | 'planet_artifact' | 'players' | 'planets' | 'revealed_x' | 'revealed_y' | 'revealed_revealer'>;
+      } as ContractStorageLayout<'admin' | 'paused' | 'world_radius' | 'planethash_key' | 'spacetype_key' | 'perlin_length_scale' | 'init_perlin_min' | 'init_perlin_max' | 'perlin_threshold_1' | 'perlin_threshold_2' | 'perlin_threshold_3' | 'planet_count' | 'player_count' | 'artifact_count' | 'artifacts' | 'planet_artifact' | 'players' | 'planets' | 'revealed_x' | 'revealed_y' | 'revealed_revealer' | 'arrival_count' | 'arrivals' | 'planet_arrival_count' | 'planet_arrivals'>;
     }
     
 
@@ -271,6 +283,9 @@ revealed_revealer: {
     /** public_dispatch(selector: field) */
     public_dispatch: ((selector: FieldLike) => ContractFunctionInteraction) & Pick<ContractMethod, 'selector'>;
 
+    /** refresh_planet(planet_id: field) */
+    refresh_planet: ((planet_id: FieldLike) => ContractFunctionInteraction) & Pick<ContractMethod, 'selector'>;
+
     /** reveal_location(x: field, y: field, planet_id: field) */
     reveal_location: ((x: FieldLike, y: FieldLike, planet_id: FieldLike) => ContractFunctionInteraction) & Pick<ContractMethod, 'selector'>;
 
@@ -279,6 +294,9 @@ revealed_revealer: {
 
     /** unpause() */
     unpause: (() => ContractFunctionInteraction) & Pick<ContractMethod, 'selector'>;
+
+    /** upgrade_planet(planet_id: field, branch: integer) */
+    upgrade_planet: ((planet_id: FieldLike, branch: (bigint | number)) => ContractFunctionInteraction) & Pick<ContractMethod, 'selector'>;
   };
 
   

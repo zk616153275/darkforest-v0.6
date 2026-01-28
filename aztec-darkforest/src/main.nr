@@ -104,6 +104,15 @@ pub contract DarkForest {
         revealed_x: Map<Field, PublicMutable<Field, Context>, Context>,
         revealed_y: Map<Field, PublicMutable<Field, Context>, Context>,
         revealed_revealer: Map<Field, PublicMutable<AztecAddress, Context>, Context>,
+
+        // Arrival tracking for delayed movement
+        arrival_count: PublicMutable<u64, Context>,
+        // Arrivals by ID
+        arrivals: Map<Field, PublicMutable<crate::types::arrival::ArrivalData, Context>, Context>,
+        // Planet -> arrival count (how many pending arrivals)
+        planet_arrival_count: Map<Field, PublicMutable<u8, Context>, Context>,
+        // Planet -> slot index -> arrival ID (up to 12 arrivals per planet)
+        planet_arrivals: Map<Field, Map<u8, PublicMutable<Field, Context>, Context>, Context>,
     }
 
     // =========================================================================
@@ -351,7 +360,14 @@ pub contract DarkForest {
         assert(computed_from == from_planet_id, "Invalid from coordinates");
         assert(computed_to == to_planet_id, "Invalid to coordinates");
 
-        // 2. Get sender
+        // 2. Universe Boundary Check: to_x^2 + to_y^2 < world_radius^2
+        // Matches Circom circuit check: "check x2^2 + y2^2 < r^2"
+        let world_radius = self.storage.world_radius.read();
+        let to_dist_squared = (to_x * to_x + to_y * to_y) as u64;
+        let radius_squared = world_radius * world_radius;
+        assert(to_dist_squared < radius_squared, "Destination out of universe bounds");
+
+        // 3. Get sender
         let sender = self.context.msg_sender().unwrap();
 
         // 3. Calculate distance (convert Field to i64 for distance calculation)
@@ -399,7 +415,10 @@ pub contract DarkForest {
         // 1. Check game is not paused
         assert(!self.storage.paused.read(), "Game is paused");
 
-        // 2. Verify sender owns the source planet and it is initialized
+        // 2. Refresh source planet arrivals first (like Solidity)
+        self.internal._refresh_planet_internal(from_planet_id);
+
+        // 3. Verify sender owns the source planet and it is initialized
         let mut from_planet = self.storage.planets.at(from_planet_id).read();
         assert(from_planet.owner == sender, "Not planet owner");
         assert(from_planet.is_initialized, "Source planet not initialized");
@@ -443,10 +462,10 @@ pub contract DarkForest {
         self.storage.planets.at(from_planet_id).write(from_planet);
 
         // ---------------------------------------------------------
-        // Destination Planet Logic (Arrival)
+        // Destination Planet Logic (Delayed Arrival)
         // ---------------------------------------------------------
 
-        // Initialize if empty
+        // Initialize destination planet if empty
         let mut to_planet = self.storage.planets.at(to_planet_id).read();
         if !to_planet.is_initialized {
             let t1 = self.storage.perlin_threshold_1.read();
@@ -457,70 +476,50 @@ pub contract DarkForest {
             to_planet = crate::planet::init::create_unowned_planet(
                 to_planet_id, 0, space_type, to_perlin, timestamp
             );
+            self.storage.planets.at(to_planet_id).write(to_planet);
             self.storage.planet_count.write(self.storage.planet_count.read() + 1);
         }
 
-        // Refresh Destination
-        let to_artifact_id = self.storage.planet_artifact.at(to_planet_id).read();
-        let mut to_artifact_type = 0;
-        if to_artifact_id != 0 {
-             let art = self.storage.artifacts.at(to_artifact_id).read();
-             to_artifact_type = art.artifact_type;
+        // Calculate travel time and arrival time
+        let mut travel_time = crate::planet::move_planet::calculate_travel_time(distance, from_planet.speed);
+
+        // don't allow 0 second voyages (same as Solidity)
+        if travel_time == 0 {
+            travel_time = 1;
         }
 
-        let (_, _, dest_defense, dest_pop_cap, dest_pop_growth, dest_silver_cap, dest_silver_growth) =
-            crate::planet::state::get_effective_stats(
-                to_planet.range, to_planet.speed, to_planet.defense,
-                to_planet.population_cap, to_planet.population_growth,
-                to_planet.silver_cap, to_planet.silver_growth,
-                to_planet.upgrade_state_0, to_planet.upgrade_state_1, to_planet.upgrade_state_2,
-                to_planet.hat_level, to_artifact_type
-            );
+        let arrival_time = timestamp + travel_time;
 
-        to_planet = crate::planet::state::refresh_planet_state(
-            to_planet, timestamp,
-            dest_pop_cap, dest_pop_growth, dest_silver_cap, dest_silver_growth
+        // Calculate energy after decay
+        let pop_arriving = crate::planet::move_planet::calculate_energy_decay(
+            energy_sent, distance, src_range
         );
+        assert(pop_arriving > 0, "Not enough forces to make move");
 
-        // Apply Arrival Logic
-        // Simple instant arrival (no decay for MVP)
-        let arriving_energy = energy_sent;
+        // Create Arrival record
+        let mut arrival_count = self.storage.arrival_count.read();
+        arrival_count += 1;
+        self.storage.arrival_count.write(arrival_count);
 
-        if to_planet.owner == sender {
-            // Reinforce
-            let mut new_pop = to_planet.population + arriving_energy;
-            if new_pop > dest_pop_cap { new_pop = dest_pop_cap; }
-            to_planet.population = new_pop;
+        let arrival_id = arrival_count as Field;
+        let arrival = crate::types::arrival::ArrivalData {
+            id: arrival_count,
+            player: sender,
+            from_planet: from_planet_id,
+            to_planet: to_planet_id,
+            pop_arriving: pop_arriving,
+            silver_moved: silver_sent,
+            departure_time: timestamp,
+            arrival_time: arrival_time,
+            distance: distance,
+        };
+        self.storage.arrivals.at(arrival_id).write(arrival);
 
-            let mut new_silver = to_planet.silver + silver_sent;
-            if new_silver > dest_silver_cap { new_silver = dest_silver_cap; }
-            to_planet.silver = new_silver;
-        } else {
-            // Attack
-            // Defense bonus applies to population
-            let effective_defense_pop = (to_planet.population * dest_defense) / 100;
-
-            if arriving_energy > effective_defense_pop {
-                // Conquered!
-                to_planet.owner = sender;
-                to_planet.population = arriving_energy - effective_defense_pop;
-                // Cap? Usually conquest sets low pop?
-                if to_planet.population > dest_pop_cap { to_planet.population = dest_pop_cap; }
-
-                // Loot silver? Usually percentage
-                to_planet.silver = to_planet.silver / 2; // simplified looot
-            } else {
-                // Defended
-                let damage = (arriving_energy * 100) / dest_defense;
-                if damage > to_planet.population {
-                    to_planet.population = 0;
-                } else {
-                    to_planet.population -= damage;
-                }
-            }
-        }
-
-        self.storage.planets.at(to_planet_id).write(to_planet);
+        // Link arrival to destination planet
+        let mut planet_arrival_count = self.storage.planet_arrival_count.at(to_planet_id).read();
+        assert(planet_arrival_count < 12, "Too many pending arrivals on planet");
+        self.storage.planet_arrivals.at(to_planet_id).at(planet_arrival_count).write(arrival_id);
+        self.storage.planet_arrival_count.at(to_planet_id).write(planet_arrival_count + 1);
 
         self.context.emit_public_log(
             PlanetMoved {
@@ -533,6 +532,86 @@ pub contract DarkForest {
     }
 
     // =========================================================================
+    // Arrival Processing (Public)
+    // =========================================================================
+
+    /// Process all pending arrivals for a planet that have reached their arrival time
+    ///
+    /// This implements the "lazy evaluation" pattern from the original Dark Forest:
+    /// arrivals are only processed when someone interacts with the planet.
+    /// Anyone can call this function to process pending arrivals for any planet.
+    #[external("public")]
+    fn refresh_planet(planet_id: Field) {
+        self.internal._refresh_planet_internal(planet_id);
+    }
+
+    /// Internal function to refresh planet: process pending arrivals and update state
+    /// This is called by public functions that need to refresh planet state before operating
+    #[internal("public")]
+    fn _refresh_planet_internal(planet_id: Field) {
+        let timestamp = self.context.timestamp();
+        let mut planet = self.storage.planets.at(planet_id).read();
+
+        // Only process if planet is initialized
+        if planet.is_initialized {
+            // Get effective stats for defense calculation
+            let artifact_id = self.storage.planet_artifact.at(planet_id).read();
+            let mut artifact_type = 0;
+            if artifact_id != 0 {
+                let art = self.storage.artifacts.at(artifact_id).read();
+                artifact_type = art.artifact_type;
+            }
+
+            let (_, _, defense, pop_cap, pop_growth, silver_cap, silver_growth) =
+                crate::planet::state::get_effective_stats(
+                    planet.range, planet.speed, planet.defense,
+                    planet.population_cap, planet.population_growth,
+                    planet.silver_cap, planet.silver_growth,
+                    planet.upgrade_state_0, planet.upgrade_state_1, planet.upgrade_state_2,
+                    planet.hat_level, artifact_type
+                );
+
+            // Refresh planet state first (population/silver growth)
+            planet = crate::planet::state::refresh_planet_state(
+                planet, timestamp, pop_cap, pop_growth, silver_cap, silver_growth
+            );
+
+            // Process arrivals using helper
+            let arrival_count = self.storage.planet_arrival_count.at(planet_id).read();
+            let mut new_arrival_count: u8 = 0;
+
+            for i in 0..12 {
+                if i < arrival_count {
+                    let arrival_id = self.storage.planet_arrivals.at(planet_id).at(i).read();
+                    let arrival = self.storage.arrivals.at(arrival_id).read();
+
+                    let (updated_planet, processed) = crate::planet::move_planet::apply_arrival(
+                        planet, arrival, timestamp, defense, pop_cap, silver_cap
+                    );
+                    planet = updated_planet;
+
+                    if processed {
+                        // Clear this arrival from storage
+                        self.storage.arrivals.at(arrival_id).write(crate::types::arrival::ArrivalData::default());
+                    } else {
+                        // Keep this arrival, move it to the front
+                        if new_arrival_count != i {
+                            self.storage.planet_arrivals.at(planet_id).at(new_arrival_count).write(arrival_id);
+                        }
+                        new_arrival_count += 1;
+                    }
+                }
+            }
+
+            // Update arrival count
+            self.storage.planet_arrival_count.at(planet_id).write(new_arrival_count);
+
+            // Write back planet
+            self.storage.planets.at(planet_id).write(planet);
+        }
+    }
+
+    // =========================================================================
     // Planet Upgrades
     // =========================================================================
 
@@ -542,12 +621,14 @@ pub contract DarkForest {
     /// * `planet_id` - The planet to upgrade
     /// * `branch` - The upgrade branch (0=Defense, 1=Range, 2=Speed)
     #[external("public")]
-    #[only_self]
     fn upgrade_planet(planet_id: Field, branch: u8) {
         // 1. Check game is not paused
         assert(!self.storage.paused.read(), "Game is paused");
 
-        // 2. Verify ownership and initialization
+        // 2. Process pending arrivals first (like Solidity's refreshPlanet)
+        self.internal._refresh_planet_internal(planet_id);
+
+        // 3. Verify ownership and initialization
         let mut planet = self.storage.planets.at(planet_id).read();
         let sender = self.context.msg_sender().unwrap();
         assert(planet.owner == sender, "Not planet owner");
@@ -681,7 +762,10 @@ pub contract DarkForest {
         // 1. Check game is not paused
         assert(!self.storage.paused.read(), "Game is paused");
 
-        // 2. Verify ownership and initialization
+        // 2. Process pending arrivals first (like Solidity's refreshPlanet)
+        self.internal._refresh_planet_internal(planet_id);
+
+        // 3. Verify ownership and initialization
         let mut planet = self.storage.planets.at(planet_id).read();
         assert(planet.owner == sender, "Not planet owner");
         assert(planet.is_initialized, "Planet not initialized");
