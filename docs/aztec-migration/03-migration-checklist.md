@@ -306,3 +306,9 @@
 | ~~Perlin 实现复杂~~   | ✅ 已实现 MultiScalePerlin            |
 | Aztec Sandbox 不稳定  | 关注官方更新，使用稳定版本            |
 | 前端学习曲线          | 提前学习，参考官方示例                |
+
+---
+
+## Phase 7: 优化 (Post-Launch)
+
+- [ ] **优化 Player 存储**: 将 `Player` 结构体拆分为分离的 Map (如 `score`, `last_reveal`) 以最小化状态竞争和 Merkle 证明成本。

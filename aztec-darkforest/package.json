@@ -4,7 +4,10 @@
   "description": "Integration tests for Dark Forest Aztec contract",
   "type": "module",
   "scripts": {
-    "test": "vitest run integration.test.ts",
+    "compile:noir-contracts": "aztec compile",
+    "test:noir-contracts": "aztec test",
+    "codegen": "aztec codegen ./target/darkforest-DarkForest.json -o src/artifacts/",
+    "test:integration": "vitest run integration.test.ts",
     "test:watch": "vitest",
     "build": "tsc"
   },

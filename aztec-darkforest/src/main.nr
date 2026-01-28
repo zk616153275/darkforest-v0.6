@@ -94,8 +94,8 @@ pub contract DarkForest {
         artifacts: Map<Field, PublicMutable<crate::types::artifact::ArtifactState, Context>, Context>,
         planet_artifact: Map<Field, PublicMutable<Field, Context>, Context>,
 
-        // Player tracking: address => home_planet_id (0 = not initialized)
-        player_home_planets: Map<AztecAddress, PublicMutable<Field, Context>, Context>,
+        // Player tracking: address => PlayerPublicState
+        players: Map<AztecAddress, PublicMutable<crate::types::player::PlayerPublicState, Context>, Context>,
 
         // Planet tracking: Full state storage
         planets: Map<Field, PublicMutable<crate::types::planet::PlanetPublicState, Context>, Context>,
@@ -104,9 +104,6 @@ pub contract DarkForest {
         revealed_x: Map<Field, PublicMutable<Field, Context>, Context>,
         revealed_y: Map<Field, PublicMutable<Field, Context>, Context>,
         revealed_revealer: Map<Field, PublicMutable<AztecAddress, Context>, Context>,
-
-        // Player cooldowns
-        player_last_reveal: Map<AztecAddress, PublicMutable<u64, Context>, Context>,
     }
 
     // =========================================================================
@@ -242,9 +239,9 @@ pub contract DarkForest {
         // 1. Check game is not paused
         assert(!self.storage.paused.read(), "Game is paused");
 
-        // 2. Check player not already initialized (home_planet != 0)
-        let existing_home = self.storage.player_home_planets.at(sender).read();
-        assert(existing_home == 0, "Player already initialized");
+        // 2. Check player not already initialized
+        let existing_player = self.storage.players.at(sender).read();
+        assert(!existing_player.is_initialized, "Player already initialized");
 
         // 3. Check planet not already taken
         // We check if planet_id exists in planets map by checking owner/init status
@@ -278,8 +275,14 @@ pub contract DarkForest {
         // 7. Store Planet
         self.storage.planets.at(planet_id).write(new_planet);
 
-        // 8. Store player's home planet
-        self.storage.player_home_planets.at(sender).write(planet_id);
+        // 8. Store player
+        let new_player = crate::types::player::PlayerPublicState::new(
+            sender,
+            planet_id,
+            timestamp,
+            0 // space_junk_limit (TODO: read from config)
+        );
+        self.storage.players.at(sender).write(new_player);
 
         // 9. Store planet perlin separately if needed for other checks,
         // but it is now in PlanetPublicState. Keeping the separate map for now
@@ -790,7 +793,10 @@ pub contract DarkForest {
         sender: AztecAddress
     ) {
         // 1. Check cooldown (24 hours = 86400 seconds)
-        let last_reveal = self.storage.player_last_reveal.at(sender).read();
+        let mut player = self.storage.players.at(sender).read();
+        assert(player.is_initialized, "Player not initialized");
+
+        let last_reveal = player.last_reveal_timestamp;
         let current_time = self.context.timestamp();
         // Note: Check for underflow/first time (last_reveal could be 0)
         if last_reveal != 0 {
@@ -803,7 +809,8 @@ pub contract DarkForest {
         self.storage.revealed_revealer.at(planet_id).write(sender);
 
         // 3. Update player cooldown
-        self.storage.player_last_reveal.at(sender).write(current_time);
+        player.last_reveal_timestamp = current_time;
+        self.storage.players.at(sender).write(player);
 
         // Emit Event
         self.context.emit_public_log(
@@ -890,7 +897,7 @@ pub contract DarkForest {
     #[external("public")]
     #[view]
     fn is_player_initialized(player: AztecAddress) -> pub bool {
-        self.storage.player_home_planets.at(player).read() != 0
+        self.storage.players.at(player).read().is_initialized
     }
 
     /// Get a player's home planet ID
@@ -898,7 +905,7 @@ pub contract DarkForest {
     #[external("public")]
     #[view]
     fn get_player_home_planet(player: AztecAddress) -> pub Field {
-        self.storage.player_home_planets.at(player).read()
+        self.storage.players.at(player).read().home_planet_id
     }
 
     // =========================================================================

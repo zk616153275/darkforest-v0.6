@@ -127,7 +127,7 @@ export class DarkForestContract extends ContractBase {
   }
   
 
-  public static get storage(): ContractStorageLayout<'admin' | 'paused' | 'world_radius' | 'planethash_key' | 'spacetype_key' | 'perlin_length_scale' | 'init_perlin_min' | 'init_perlin_max' | 'perlin_threshold_1' | 'perlin_threshold_2' | 'perlin_threshold_3' | 'planet_count' | 'player_count' | 'artifact_count' | 'artifacts' | 'planet_artifact' | 'player_home_planets' | 'planets' | 'revealed_x' | 'revealed_y' | 'revealed_revealer' | 'player_last_reveal'> {
+  public static get storage(): ContractStorageLayout<'admin' | 'paused' | 'world_radius' | 'planethash_key' | 'spacetype_key' | 'perlin_length_scale' | 'init_perlin_min' | 'init_perlin_max' | 'perlin_threshold_1' | 'perlin_threshold_2' | 'perlin_threshold_3' | 'planet_count' | 'player_count' | 'artifact_count' | 'artifacts' | 'planet_artifact' | 'players' | 'planets' | 'revealed_x' | 'revealed_y' | 'revealed_revealer'> {
       return {
         admin: {
       slot: new Fr(1n),
@@ -177,7 +177,7 @@ artifacts: {
 planet_artifact: {
       slot: new Fr(25n),
     },
-player_home_planets: {
+players: {
       slot: new Fr(26n),
     },
 planets: {
@@ -191,11 +191,8 @@ revealed_y: {
     },
 revealed_revealer: {
       slot: new Fr(30n),
-    },
-player_last_reveal: {
-      slot: new Fr(31n),
     }
-      } as ContractStorageLayout<'admin' | 'paused' | 'world_radius' | 'planethash_key' | 'spacetype_key' | 'perlin_length_scale' | 'init_perlin_min' | 'init_perlin_max' | 'perlin_threshold_1' | 'perlin_threshold_2' | 'perlin_threshold_3' | 'planet_count' | 'player_count' | 'artifact_count' | 'artifacts' | 'planet_artifact' | 'player_home_planets' | 'planets' | 'revealed_x' | 'revealed_y' | 'revealed_revealer' | 'player_last_reveal'>;
+      } as ContractStorageLayout<'admin' | 'paused' | 'world_radius' | 'planethash_key' | 'spacetype_key' | 'perlin_length_scale' | 'init_perlin_min' | 'init_perlin_max' | 'perlin_threshold_1' | 'perlin_threshold_2' | 'perlin_threshold_3' | 'planet_count' | 'player_count' | 'artifact_count' | 'artifacts' | 'planet_artifact' | 'players' | 'planets' | 'revealed_x' | 'revealed_y' | 'revealed_revealer'>;
     }
     
 
