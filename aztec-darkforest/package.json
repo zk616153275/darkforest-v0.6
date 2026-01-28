@@ -1,0 +1,28 @@
+{
+  "name": "aztec-darkforest-tests",
+  "version": "1.0.0",
+  "description": "Integration tests for Dark Forest Aztec contract",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run integration.test.ts",
+    "test:watch": "vitest",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@aztec/accounts": "3.0.0-devnet.6-patch.1",
+    "@aztec/aztec.js": "3.0.0-devnet.6-patch.1",
+    "@aztec/bb.js": "3.0.0-devnet.6-patch.1",
+    "@aztec/kv-store": "3.0.0-devnet.6-patch.1",
+    "@aztec/noir-contracts.js": "3.0.0-devnet.6-patch.1",
+    "@aztec/noir-noir_js": "3.0.0-devnet.6-patch.1",
+    "@aztec/pxe": "3.0.0-devnet.6-patch.1",
+    "@aztec/test-wallet": "3.0.0-devnet.6-patch.1",
+    "tsx": "^4.20.6"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "vitest": "^3.0.0",
+    "typescript": "^5.0.0"
+  },
+  "packageManager": "yarn@1.22.22"
+}

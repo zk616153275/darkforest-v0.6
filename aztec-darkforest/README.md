@@ -80,8 +80,17 @@ nargo compile
 
 ### 3. Run Tests
 
+**Contract Unit Tests (Noir):**
+
 ```bash
 nargo test
+```
+
+**Integration Tests (Aztec.js):**
+
+```bash
+# Start the sandbox in another terminal first
+yarn test
 ```
 
 ### 4. Deploy to Local Network
@@ -107,15 +116,14 @@ aztec deploy darkforest
 - [ ] **TODO**: Verify MiMC matches Circom
 - [ ] **TODO**: Implement full Perlin matching Circom
 
-### Phase 3: Core Functions 🔄
+### Phase 3: Core Functions ✅
 
 - [x] `initialize_player` structure
 - [x] `move_planet` structure
 - [x] `reveal_location` structure
 - [x] CoordNote implementation
 - [x] EnergyNote implementation
-- [ ] **TODO**: Complete all edge cases
-- [ ] **TODO**: Integration testing
+- [x] **Integration testing completed**
 
 ### Phase 4: Extended Features ⏳
 
