@@ -85,6 +85,9 @@ pub contract DarkForest {
         perlin_threshold_2: PublicImmutable<u64, Context>,
         perlin_threshold_3: PublicImmutable<u64, Context>,
 
+        // [DIFF-4] Reveal cooldown (in seconds, default 86400 = 24 hours)
+        reveal_cooldown: PublicImmutable<u64, Context>,
+
         // Counters
         planet_count: PublicMutable<u64, Context>,
         player_count: PublicMutable<u64, Context>,
@@ -104,6 +107,9 @@ pub contract DarkForest {
         revealed_x: Map<Field, PublicMutable<Field, Context>, Context>,
         revealed_y: Map<Field, PublicMutable<Field, Context>, Context>,
         revealed_revealer: Map<Field, PublicMutable<AztecAddress, Context>, Context>,
+        // [DIFF-6] Revealed planet IDs list for enumeration
+        revealed_count: PublicMutable<u64, Context>,
+        revealed_planet_ids: Map<u64, PublicMutable<Field, Context>, Context>,
 
         // Arrival tracking for delayed movement
         arrival_count: PublicMutable<u64, Context>,
@@ -159,11 +165,15 @@ pub contract DarkForest {
         self.storage.perlin_threshold_2.initialize(13);
         self.storage.perlin_threshold_3.initialize(15);
 
+        // [DIFF-4] Default reveal cooldown: 24 hours = 86400 seconds
+        self.storage.reveal_cooldown.initialize(86400);
+
         // Counters
         self.storage.planet_count.write(0);
         self.storage.player_count.write(0);
         self.storage.artifact_count.write(0);
-        self.storage.artifact_count.write(0);
+        // [DIFF-6] Initialize revealed planet counter
+        self.storage.revealed_count.write(0);
     }
 
     // =========================================================================
@@ -484,9 +494,7 @@ pub contract DarkForest {
         let mut travel_time = crate::planet::move_planet::calculate_travel_time(distance, from_planet.speed);
 
         // don't allow 0 second voyages (same as Solidity)
-        if travel_time == 0 {
-            travel_time = 1;
-        }
+        if travel_time == 0 { travel_time = 1; }
 
         let arrival_time = timestamp + travel_time;
 
@@ -853,6 +861,10 @@ pub contract DarkForest {
     /// # Arguments
     /// * `x`, `y` - Private coordinates
     /// * `planet_id` - Public planet ID
+    ///
+    /// # Migration TODOs (vs Circom circuits/reveal/circuit.circom):
+    /// - [x] DIFF-1: Coordinate range check |x|, |y| <= 2^31 - DONE
+    /// - [x] DIFF-7: Whitelist check covered by is_initialized - DONE
     #[external("private")]
     fn reveal_location(
         x: Field,
@@ -861,44 +873,107 @@ pub contract DarkForest {
     ) {
         // Read config
         let planethash_key = self.storage.planethash_key.read();
+        let spacetype_key = self.storage.spacetype_key.read();
+        let perlin_scale = self.storage.perlin_length_scale.read();
+
+        // [DIFF-1] Coordinate range check: |x|, |y| <= 2^31
+        // Circom uses Num2Bits(32) to ensure x + 2^31 fits in 32-bit unsigned
+        // i.e. 0 <= x + 2^31 < 2^32, equivalent to -2^31 <= x < 2^31
+        let max_coord: Field = 2147483648; // 2^31
+        let x_shifted = x + max_coord;
+        let y_shifted = y + max_coord;
+        // Check shifted value is in [0, 2^32) range
+        // Field is a large prime field, negative numbers wrap to large positives
+        // So we check shifted < 2^32 (i.e. 4294967296)
+        let max_shifted: Field = 4294967296; // 2^32
+        assert(x_shifted.lt(max_shifted), "x coordinate out of range");
+        assert(y_shifted.lt(max_shifted), "y coordinate out of range");
 
         // 1. Verify hash
         let computed = compute_planet_hash(x, y, planethash_key);
         assert(computed == planet_id, "Invalid coordinates");
 
+        // [DIFF-3] Compute perlin for planet initialization
+        // Circom reveal circuit also outputs perlin value
+        let perlin = crate::utils::perlin::compute_perlin(x, y, spacetype_key, perlin_scale);
+
         // 2. Get sender
         let sender = self.context.msg_sender().unwrap();
 
-        // 3. Enqueue public callback
-        self.enqueue_self.reveal_callback(planet_id, x, y, sender);
+        // 3. Enqueue public callback (pass perlin for potential planet init)
+        self.enqueue_self.reveal_callback(planet_id, x, y, perlin, sender);
     }
 
     /// Process location reveal
     ///
     /// Validates cooldown and updates revealed state
+    ///
+    /// # Migration TODOs (vs Solidity LibPlanet.sol::revealLocation):
+    /// - [x] DIFF-2: Duplicate reveal check - DONE
+    /// - [x] DIFF-3: Auto-init uninitialized planets - DONE
+    /// - [x] DIFF-4: Cooldown from config - DONE
+    /// - [x] DIFF-5: Admin skips cooldown - DONE
+    /// - [x] DIFF-6: revealed_planet_ids list - DONE
     #[external("public")]
     #[only_self]
     fn reveal_callback(
         planet_id: Field,
         x: Field,
         y: Field,
+        perlin: u64,
         sender: AztecAddress
     ) {
-        // 1. Check cooldown (24 hours = 86400 seconds)
+        // [DIFF-2] Check if planet already revealed
+        // Solidity: require(revealedCoords[location].locationId == 0, "Location already revealed");
+        let existing_revealer = self.storage.revealed_revealer.at(planet_id).read();
+        assert(existing_revealer == AztecAddress::zero(), "Location already revealed");
+
+        // [DIFF-3] Auto-initialize planet if not initialized
+        // Solidity: if (!planets[location].isInitialized) initializePlanetWithDefaults(...)
+        let planet = self.storage.planets.at(planet_id).read();
+        if !planet.is_initialized {
+            let t1 = self.storage.perlin_threshold_1.read();
+            let t2 = self.storage.perlin_threshold_2.read();
+            let t3 = self.storage.perlin_threshold_3.read();
+            let space_type = crate::types::enums::get_space_type_from_perlin(perlin, t1, t2, t3);
+            let timestamp = self.context.timestamp();
+
+            let new_planet = crate::planet::init::create_unowned_planet(
+                planet_id, 0, space_type, perlin, timestamp
+            );
+            self.storage.planets.at(planet_id).write(new_planet);
+            self.storage.planet_count.write(self.storage.planet_count.read() + 1);
+        }
+
+        // 1. Check cooldown
+        // [DIFF-4] Use config value instead of hardcoded 86400
+        // [DIFF-5] Admin can skip cooldown check
+        let reveal_cooldown = self.storage.reveal_cooldown.read();
+        let admin = self.storage.admin.read();
+        let is_admin = sender == admin;
+        let current_time = self.context.timestamp();
+
         let mut player = self.storage.players.at(sender).read();
         assert(player.is_initialized, "Player not initialized");
 
-        let last_reveal = player.last_reveal_timestamp;
-        let current_time = self.context.timestamp();
-        // Note: Check for underflow/first time (last_reveal could be 0)
-        if last_reveal != 0 {
-            assert(current_time >= last_reveal + 86400, "Reveal cooldown active");
+        // Admin skips cooldown check (matches Solidity checkTimestamp behavior)
+        if !is_admin {
+            let last_reveal = player.last_reveal_timestamp;
+            // Note: Check for underflow/first time (last_reveal could be 0)
+            if last_reveal != 0 {
+                assert(current_time >= last_reveal + reveal_cooldown, "Reveal cooldown active");
+            }
         }
 
         // 2. Update revealed state
         self.storage.revealed_x.at(planet_id).write(x);
         self.storage.revealed_y.at(planet_id).write(y);
         self.storage.revealed_revealer.at(planet_id).write(sender);
+
+        // [DIFF-6] Append planet_id to revealed_planet_ids list
+        let revealed_idx = self.storage.revealed_count.read();
+        self.storage.revealed_planet_ids.at(revealed_idx).write(planet_id);
+        self.storage.revealed_count.write(revealed_idx + 1);
 
         // 3. Update player cooldown
         player.last_reveal_timestamp = current_time;

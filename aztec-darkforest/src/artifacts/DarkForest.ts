@@ -127,7 +127,7 @@ export class DarkForestContract extends ContractBase {
   }
   
 
-  public static get storage(): ContractStorageLayout<'admin' | 'paused' | 'world_radius' | 'planethash_key' | 'spacetype_key' | 'perlin_length_scale' | 'init_perlin_min' | 'init_perlin_max' | 'perlin_threshold_1' | 'perlin_threshold_2' | 'perlin_threshold_3' | 'planet_count' | 'player_count' | 'artifact_count' | 'artifacts' | 'planet_artifact' | 'players' | 'planets' | 'revealed_x' | 'revealed_y' | 'revealed_revealer' | 'arrival_count' | 'arrivals' | 'planet_arrival_count' | 'planet_arrivals'> {
+  public static get storage(): ContractStorageLayout<'admin' | 'paused' | 'world_radius' | 'planethash_key' | 'spacetype_key' | 'perlin_length_scale' | 'init_perlin_min' | 'init_perlin_max' | 'perlin_threshold_1' | 'perlin_threshold_2' | 'perlin_threshold_3' | 'reveal_cooldown' | 'planet_count' | 'player_count' | 'artifact_count' | 'artifacts' | 'planet_artifact' | 'players' | 'planets' | 'revealed_x' | 'revealed_y' | 'revealed_revealer' | 'revealed_count' | 'revealed_planet_ids' | 'arrival_count' | 'arrivals' | 'planet_arrival_count' | 'planet_arrivals'> {
       return {
         admin: {
       slot: new Fr(1n),
@@ -162,49 +162,58 @@ perlin_threshold_2: {
 perlin_threshold_3: {
       slot: new Fr(19n),
     },
-planet_count: {
+reveal_cooldown: {
       slot: new Fr(21n),
     },
-player_count: {
-      slot: new Fr(22n),
-    },
-artifact_count: {
+planet_count: {
       slot: new Fr(23n),
     },
-artifacts: {
+player_count: {
       slot: new Fr(24n),
     },
-planet_artifact: {
+artifact_count: {
       slot: new Fr(25n),
     },
-players: {
+artifacts: {
       slot: new Fr(26n),
     },
-planets: {
+planet_artifact: {
       slot: new Fr(27n),
     },
-revealed_x: {
+players: {
       slot: new Fr(28n),
     },
-revealed_y: {
+planets: {
       slot: new Fr(29n),
     },
-revealed_revealer: {
+revealed_x: {
       slot: new Fr(30n),
     },
-arrival_count: {
+revealed_y: {
       slot: new Fr(31n),
     },
-arrivals: {
+revealed_revealer: {
       slot: new Fr(32n),
     },
-planet_arrival_count: {
+revealed_count: {
       slot: new Fr(33n),
     },
-planet_arrivals: {
+revealed_planet_ids: {
       slot: new Fr(34n),
+    },
+arrival_count: {
+      slot: new Fr(35n),
+    },
+arrivals: {
+      slot: new Fr(36n),
+    },
+planet_arrival_count: {
+      slot: new Fr(37n),
+    },
+planet_arrivals: {
+      slot: new Fr(38n),
     }
-      } as ContractStorageLayout<'admin' | 'paused' | 'world_radius' | 'planethash_key' | 'spacetype_key' | 'perlin_length_scale' | 'init_perlin_min' | 'init_perlin_max' | 'perlin_threshold_1' | 'perlin_threshold_2' | 'perlin_threshold_3' | 'planet_count' | 'player_count' | 'artifact_count' | 'artifacts' | 'planet_artifact' | 'players' | 'planets' | 'revealed_x' | 'revealed_y' | 'revealed_revealer' | 'arrival_count' | 'arrivals' | 'planet_arrival_count' | 'planet_arrivals'>;
+      } as ContractStorageLayout<'admin' | 'paused' | 'world_radius' | 'planethash_key' | 'spacetype_key' | 'perlin_length_scale' | 'init_perlin_min' | 'init_perlin_max' | 'perlin_threshold_1' | 'perlin_threshold_2' | 'perlin_threshold_3' | 'reveal_cooldown' | 'planet_count' | 'player_count' | 'artifact_count' | 'artifacts' | 'planet_artifact' | 'players' | 'planets' | 'revealed_x' | 'revealed_y' | 'revealed_revealer' | 'revealed_count' | 'revealed_planet_ids' | 'arrival_count' | 'arrivals' | 'planet_arrival_count' | 'planet_arrivals'>;
     }
     
 

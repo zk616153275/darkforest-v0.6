@@ -129,12 +129,29 @@
 - [x] 更新揭示坐标存储
 - [x] 编写测试
 
+#### reveal_location 逻辑差异 (vs Circom + Solidity)
+
+> 详细分析见 [04-reveal-location-review.md](./04-reveal-location-review.md)
+
+**私有层 (vs Circom circuits/reveal/circuit.circom)**:
+
+- [x] **[DIFF-1]** 添加坐标范围检查 `|x|, |y| <= 2^31` ✅
+- [x] **[DIFF-7]** 白名单检查 (通过 `is_initialized` 隐式覆盖) ✅
+
+**公共层 (vs Solidity LibPlanet.sol::revealLocation)**:
+
+- [x] **[DIFF-2]** 添加重复 reveal 检查 (防止覆盖) ✅
+- [x] **[DIFF-3]** 添加未初始化星球自动初始化 ✅
+- [x] **[DIFF-4]** Cooldown 配置化 (当前硬编码 86400) ✅
+- [x] **[DIFF-5]** Admin 跳过 cooldown 检查 ✅
+- [x] **[DIFF-6]** 添加 revealed_planet_ids 列表 ✅
+
 ### 3.6 星球状态管理
 
 - [x] 实现 `refresh_planet(...)` - 刷新能量/银矿
 - [x] 实现能量增长计算
 - [x] 实现银矿增长计算
-- [x] 实现到达处理
+- [x] 实现到达处理 (Travel Time Delay)
 
 ### 3.7 星球升级
 
@@ -312,3 +329,4 @@
 ## Phase 7: 优化 (Post-Launch)
 
 - [ ] **优化 Player 存储**: 将 `Player` 结构体拆分为分离的 Map (如 `score`, `last_reveal`) 以最小化状态竞争和 Merkle 证明成本。
+- [ ] **实现动态宇宙半径 (Dynamic Radius)**: 移植 Solidity 的 `initializedPlanetCountByLevel` 逻辑，使 `world_radius` 随玩家数量动态扩张。
