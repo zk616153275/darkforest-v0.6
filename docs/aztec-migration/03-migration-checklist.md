@@ -176,6 +176,25 @@
 - [x] 实现 `deactivate_artifact(...)` (Passive Logic)
 - [x] 编写测试
 
+#### find_artifact 逻辑差异 (vs Circom + Solidity)
+
+> 详细分析见 [05-find-artifact-review.md](./05-find-artifact-review.md)
+
+**Found Differences** (see [05-find-artifact-review.md](./05-find-artifact-review.md)):
+
+| #   | Diff                                   | Status                                |
+| --- | -------------------------------------- | ------------------------------------- |
+| 1   | Prospect two-step mechanism missing    | [ ] Deferred - needs design           |
+| 2   | Random source predictable (fixed seed) | [ ] Deferred - needs Aztec randomness |
+| 3   | RUINS planet type check                | [x] DONE                              |
+| 4   | Missing Gear Ship check                | [ ] Optional feature                  |
+| 5   | Rarity based on planet level           | [x] DONE                              |
+| 6   | Artifact Type distribution expanded    | [x] DONE                              |
+| 7   | Player score update                    | [x] DONE                              |
+| 8   | Biome calculation uses single perlin   | [x] DONE (design simplification)      |
+| 9   | Prospect 256 block expiry check        | [ ] Deferred - depends on DIFF-1      |
+| 10  | Energy cost for prospecting            | [x] DONE (50% pop cost added)         |
+
 ### 4.2 飞船系统
 
 - [ ] 实现飞船类型神器

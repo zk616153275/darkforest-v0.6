@@ -738,6 +738,11 @@ pub contract DarkForest {
     /// # Arguments
     /// * `x`, `y` - Private coordinates
     /// * `planet_id` - Planet to search on
+    ///
+    /// # TODO REVIEW DIFFS (vs Solidity DFArtifactFacet.findArtifact):
+    /// - [ ] DIFF-1: Solidity uses 2-step prospect+find, evaluate if needed
+    /// - [x] DIFF-3: RUINS planet type check - DONE
+    /// - [ ] DIFF-4: Missing Gear Ship check (require containsGear if enabled)
     #[external("private")]
     fn find_artifact(
         x: Field,
@@ -761,6 +766,13 @@ pub contract DarkForest {
     /// Process artifact discovery
     ///
     /// Validates cost and randomness
+    ///
+    /// # TODO REVIEW DIFFS (vs Solidity LibArtifactUtils.findArtifact):
+    /// - [ ] DIFF-2: Random source needs improvement - Solidity uses blockhash
+    /// - [x] DIFF-5: Rarity based on planet level - DONE
+    /// - [x] DIFF-6: Artifact type distribution expanded - DONE
+    /// - [x] DIFF-7: Player score update - DONE
+    /// - [ ] DIFF-9: Missing prospect 256 block expiry check
     #[external("public")]
     #[only_self]
     fn find_artifact_callback(
@@ -779,7 +791,13 @@ pub contract DarkForest {
         assert(planet.is_initialized, "Planet not initialized");
         assert(!planet.has_tried_finding_artifact, "Already searched this planet");
 
-        // 3. Refresh state
+        // [DIFF-3] Check planet type is RUINS (where artifacts can be found)
+        assert(
+            planet.planet_type == crate::types::enums::PlanetType::RUINS(),
+            "Can only find artifacts on RUINS planets"
+        );
+
+        // 4. Refresh state
         // Initial find: No artifact yet
         let (_, _, _, pop_cap, pop_growth, silver_cap, silver_growth) =
             crate::planet::state::get_effective_stats(
@@ -796,26 +814,23 @@ pub contract DarkForest {
             pop_cap, pop_growth, silver_cap, silver_growth
         );
 
-        // 4. Calculate cost (50% of max population)
+        // 5. Calculate cost (50% of max population)
         let cost = planet.population_cap / 2;
         assert(planet.population >= cost, "Insufficient energy for prospecting");
         planet.population -= cost;
 
-        // 5. Mark as searched
+        // 6. Mark as searched
         planet.has_tried_finding_artifact = true;
         self.storage.planets.at(planet_id).write(planet);
 
-        // 6. Check for artifact
+        // 7. Check for artifact
         if crate::artifact::discovery::is_artifact_found(planet_id) {
             // Found! Mint artifact
-            let rarity = crate::artifact::discovery::roll_rarity(planet_id);
-            // We need space_type/biome for type rolling?
-            // SpaceType is public logic? No, derived from Perlin.
-            // But we don't have Perlin passed here. Storage has `current_perlin`.
-            let planet_perlin = planet.perlin;
+            // [DIFF-5] Pass planet level to roll_rarity (rarity based on planet level)
+            let rarity = crate::artifact::discovery::roll_rarity(planet_id, planet.level);
 
-            // Get space type to influence artifact?
-            // For now, allow roll regardless of biome, or use mock biome
+            // Get perlin for biome-based artifact type
+            let planet_perlin = planet.perlin;
             let artifact_type = crate::artifact::discovery::roll_artifact_type(planet_id, planet_perlin as u8);
 
             // Increment count for ID
@@ -823,7 +838,7 @@ pub contract DarkForest {
             count += 1;
             self.storage.artifact_count.write(count);
 
-            let new_artifact_id = count as Field; // Simple ID generation
+            let new_artifact_id = count as Field;
 
             // Create Artifact
             let mut artifact = crate::types::artifact::ArtifactState::default();
@@ -838,6 +853,16 @@ pub contract DarkForest {
             // Link storage
             self.storage.artifacts.at(new_artifact_id).write(artifact);
             self.storage.planet_artifact.at(planet_id).write(new_artifact_id);
+
+            // [DIFF-7] Update player score based on artifact rarity
+            // Solidity: ARTIFACT_POINT_VALUES = [0, 2000, 10000, 200000, 3000000, 20000000]
+            // Index: Unknown=0, Common=1, Rare=2, Epic=3, Legendary=4, Mythic=5
+            let artifact_point_values: [u64; 6] = [0, 2000, 10000, 200000, 3000000, 20000000];
+            let points = artifact_point_values[rarity as u32];
+
+            let mut player = self.storage.players.at(sender).read();
+            player.score += points;
+            self.storage.players.at(sender).write(player);
 
             // Emit Event
             self.context.emit_public_log(
