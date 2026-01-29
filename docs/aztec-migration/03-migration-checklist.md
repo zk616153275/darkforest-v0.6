@@ -122,6 +122,30 @@
 - [x] 创建到达事件
 - [x] 编写测试
 
+#### move_planet 逻辑差异 (vs Circom + Solidity)
+
+> 详细分析见 [06-move-planet-review.md](./06-move-planet-review.md)
+
+**核心功能 (已完成)**:
+
+- [x] **[DIFF-1]** 旅行时间延迟 (`arrival_time = timestamp + travel_time`) ✅
+- [x] **[DIFF-2]** 操作前刷新星球 (`_refresh_planet_internal`) ✅
+- [x] **[DIFF-3]** 最小旅行时间 (防止同区块到达) ✅
+- [x] **[DIFF-4]** 能量衰减计算 ✅
+- [x] **[DIFF-5]** 范围检查 ✅
+- [x] **[DIFF-6]** 宇宙边界检查 ✅
+
+**高级功能 (待实现)**:
+
+| #   | Diff           | 描述                | Status   |
+| --- | -------------- | ------------------- | -------- |
+| 7   | DOS 防护       | 限制非 owner 航行数 | [ ] TODO |
+| 8   | Wormhole 加速  | 距离修改器          | [ ] TODO |
+| 9   | Photoid Cannon | 攻击 buff           | [ ] TODO |
+| 10  | 放弃星球       | 转移所有资源        | [ ] TODO |
+| 11  | 飞船移动       | 特殊规则            | [ ] TODO |
+| 12  | Artifact 运输  | movedArtifactId     | [ ] TODO |
+
 ### 3.5 坐标揭示
 
 - [x] 实现 `reveal_location(...)`
