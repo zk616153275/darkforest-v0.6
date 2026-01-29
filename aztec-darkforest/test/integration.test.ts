@@ -71,10 +71,13 @@ describe('DarkForest Contract Integration', () => {
   it(
     'should initialize a player',
     async () => {
-      const x = new Fr(100);
-      const y = new Fr(200);
+      // Rim spawn: need dist^2 >= 0.98 * radius^2
+      // For radius=1000, need dist >= 990
+      // Using (700, 700): dist = sqrt(980000) ≈ 990
+      const x = new Fr(700);
+      const y = new Fr(700);
 
-      console.log('Initializing player...');
+      console.log('Initializing player at rim location (700, 700)...');
       // Transaction pattern: .send({ from }).wait()
       const tx = await darkForest.methods.initialize_player(x, y).send({ from: player }).wait();
 
@@ -130,11 +133,11 @@ describe('DarkForest Contract Integration', () => {
         .simulate({ from: player });
       console.log('Home planet ID:', homePlanetId);
 
-      // Source and target coordinates
-      const fromX = new Fr(100); // Home coords
-      const fromY = new Fr(200);
-      const toX = new Fr(150); // Nearby target
-      const toY = new Fr(250);
+      // Source and target coordinates (home is at 700, 700)
+      const fromX = new Fr(700); // Home coords
+      const fromY = new Fr(700);
+      const toX = new Fr(750); // Nearby target (within range)
+      const toY = new Fr(750);
 
       // We need the target planet_id (hash of coords)
       // For testing, we'll use a placeholder - in real test would compute hash
@@ -207,8 +210,8 @@ describe('DarkForest Contract Integration', () => {
       try {
         await darkForest.methods
           .move_planet(
-            new Fr(100), // fromX
-            new Fr(200), // fromY
+            new Fr(700), // fromX
+            new Fr(700), // fromY
             toX,
             toY,
             homePlanetId,
@@ -250,8 +253,8 @@ describe('DarkForest Contract Integration', () => {
       try {
         await darkForest.methods
           .move_planet(
-            new Fr(100), // fromX
-            new Fr(200), // fromY
+            new Fr(700), // fromX
+            new Fr(700), // fromY
             toX,
             toY,
             homePlanetId,
@@ -291,8 +294,8 @@ describe('DarkForest Contract Integration', () => {
       try {
         await darkForest.methods
           .move_planet(
-            new Fr(100), // fromX
-            new Fr(200), // fromY
+            new Fr(700), // fromX
+            new Fr(700), // fromY
             toX,
             toY,
             homePlanetId,
