@@ -5,3 +5,5 @@ pub mod artifact;
 pub mod config;
 pub mod enums;
 pub mod arrival;
+
+mod tests;

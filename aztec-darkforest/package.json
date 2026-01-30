@@ -6,6 +6,7 @@
   "scripts": {
     "compile:noir-contracts": "aztec compile",
     "test:noir-contracts": "aztec test",
+    "test:main": "aztec test ./test/main.test.nr",
     "codegen": "aztec codegen ./target/darkforest-DarkForest.json -o src/artifacts/",
     "test:integration": "vitest run integration.test.ts",
     "test:watch": "vitest",

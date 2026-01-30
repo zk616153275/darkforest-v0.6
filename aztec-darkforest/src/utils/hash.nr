@@ -1,53 +1,37 @@
-// Hash functions - MiMC implementation
-// Using noir-lang/mimc library for compatibility with Circom MiMCSponge
+// Hash functions - Poseidon2 implementation
+// Using Aztec's Poseidon2 for performance and compatibility
 
-use dep::mimc;
+use dep::aztec::protocol_types::hash::poseidon2_hash;
 
-/// MiMC sponge hash for planet ID calculation
+/// Compute planet ID using Poseidon2
 ///
-/// This matches the output of the original Circom MiMCSponge(2, 220, 1)
-/// used in circuits/init/circuit.circom
+/// Replaced MiMCSponge with Poseidon2 for performance optimization in Aztec.
 ///
-/// Original Circom:
-/// ```circom
-/// component mimc = MiMCSponge(2, 220, 1);
-/// mimc.ins[0] <== x;
-/// mimc.ins[1] <== y;
-/// mimc.k <== PLANETHASH_KEY;
-/// pub <== mimc.outs[0];
-/// ```
+/// Inputs:
+/// - x: X coordinate
+/// - y: Y coordinate
+/// - key: Hash key (PLANETHASH_KEY)
 ///
-/// Input: (x, y, key)
-/// Output: planet_id (hash)
+/// Output: planet_id (Field)
 pub fn compute_planet_hash(x: Field, y: Field, key: Field) -> Field {
-    // Use the mimc library's sponge function
-    // MiMCSponge with 2 inputs, 220 rounds (as per circomlib)
-    mimc::mimc_bn254([x, y, key])
+    // Poseidon2 is the most efficient in-circuit hash algorithm in Aztec
+    poseidon2_hash([x, y, key])
 }
 
-/// MiMC hash for 3 inputs (used in Perlin Random function)
-///
-/// Original Circom uses MiMCSponge(3, 4, 1) for the Random template:
-/// ```circom
-/// component mimc = MiMCSponge(3, 4, 1);
-/// mimc.ins[0] <== in[0];
-/// mimc.ins[1] <== in[1];
-/// mimc.ins[2] <== in[2];
-/// mimc.k <== KEY;
-/// ```
+/// Compute random value for Perlin noise
 pub fn compute_perlin_random(x: Field, y: Field, scale: Field, key: Field) -> Field {
-    // For Perlin random, we use a simpler hash
-    mimc::mimc_bn254([x, y, scale, key])
+    poseidon2_hash([x, y, scale, key])
+}
+
+/// Compute location commitment
+/// Useful for "locking" coordinates in ZK proofs without revealing them.
+pub fn compute_location_commitment(x: Field, y: Field, salt: Field) -> Field {
+    poseidon2_hash([x, y, salt])
 }
 
 /// Extract 4 bits from hash for gradient selection (0-15)
-///
-/// Original Circom does:
-/// ```circom
-/// out <== num2Bits.out[3] * 8 + num2Bits.out[2] * 4 + num2Bits.out[1] * 2 + num2Bits.out[0];
-/// ```
 pub fn hash_to_gradient_index(hash: Field) -> u8 {
-    // Convert hash to bits and extract lowest 4 bits
+    // Convert hash to bytes and extract the lowest 4 bits of the last byte
     let hash_bytes = hash.to_be_bytes::<32>();
     let lowest_byte = hash_bytes[31];
     lowest_byte & 0x0F
@@ -99,4 +83,17 @@ fn test_gradient_index_range() {
 
     // Index should be in range [0, 15]
     assert(index < 16);
+}
+
+#[test]
+fn test_location_commitment_deterministic() {
+    let x: Field = 123;
+    let y: Field = 456;
+    let salt: Field = 789;
+
+    let commitment1 = compute_location_commitment(x, y, salt);
+    let commitment2 = compute_location_commitment(x, y, salt);
+
+    assert(commitment1 == commitment2);
+    assert(commitment1 != 0);
 }

@@ -1,64 +1,12 @@
-// Dark Forest Aztec Contract Tests
-
-use dep::aztec::test::{helpers::TestEnvironment};
-
-#[test]
-fn test_contract_deploys() {
-    // TODO: Add deployment test once Aztec test framework is set up
-    assert(true);
-}
-
-#[test]
-fn test_hash_consistency() {
-    // TODO: Add hash consistency test with original Circom output
-    use crate::utils::hash::compute_planet_hash;
-
-    let x: Field = 100;
-    let y: Field = 200;
-    let key: Field = 7;
-
-    let hash = compute_planet_hash(x, y, key);
-    assert(hash != 0);
-}
-
-#[test]
-fn test_perlin_range() {
-    use crate::utils::perlin::compute_perlin;
-
-    let x: Field = 100;
-    let y: Field = 200;
-    let key: Field = 8;
-    let scale: u64 = 8192;
-
-    let perlin = compute_perlin(x, y, key, scale);
-    assert(perlin < 32); // Perlin should be in range 0-31
-}
-
-#[test]
-fn test_distance_calculation() {
-    use crate::utils::math::distance;
-
-    // 3-4-5 triangle
-    assert(distance(0, 0, 3, 4) == 5);
-
-    // 5-12-13 triangle
-    assert(distance(0, 0, 5, 12) == 13);
-}
-
-// Integration tests to be added:
-// - test_initialize_player
-// - test_move_planet
-// - test_reveal_location
-// - test_privacy_coordinates_hidden
-
-// =========================================================================
-// Move Planet Unit Tests
-// =========================================================================
+// Move planet module tests - travel time, energy decay, arrivals
+use crate::planet::move_planet::{calculate_travel_time, calculate_energy_decay, is_within_range, apply_arrival};
+use crate::types::planet::PlanetPublicState;
+use crate::types::arrival::ArrivalData;
+use dep::aztec::protocol_types::address::AztecAddress;
+use dep::aztec::protocol_types::traits::FromField;
 
 #[test]
 fn test_travel_time_calculation() {
-    use crate::planet::move_planet::calculate_travel_time;
-
     // Basic case: distance 100, speed 100 -> time = 100
     assert(calculate_travel_time(100, 100) == 100);
 
@@ -77,8 +25,6 @@ fn test_travel_time_calculation() {
 
 #[test]
 fn test_energy_decay_calculation() {
-    use crate::planet::move_planet::calculate_energy_decay;
-
     // No distance = full energy
     assert(calculate_energy_decay(1000, 0, 100) == 1000);
 
@@ -99,8 +45,6 @@ fn test_energy_decay_calculation() {
 
 #[test]
 fn test_distance_within_range() {
-    use crate::planet::move_planet::is_within_range;
-
     // Within range: distance 50, range 100 -> true (50 <= 200)
     assert(is_within_range(50, 100) == true);
 
@@ -113,11 +57,6 @@ fn test_distance_within_range() {
 
 #[test]
 fn test_apply_arrival_reinforce() {
-    use crate::planet::move_planet::apply_arrival;
-    use crate::types::planet::PlanetPublicState;
-    use crate::types::arrival::ArrivalData;
-    use dep::aztec::protocol_types::address::AztecAddress;
-
     // Setup: owner reinforcing their own planet
     let owner = AztecAddress::from_field(123);
     let mut planet = PlanetPublicState::default();
@@ -134,8 +73,9 @@ fn test_apply_arrival_reinforce() {
         pop_arriving: 200,
         silver_moved: 50,
         departure_time: 0,
-        arrival_time: 100,  // <= timestamp
+        arrival_time: 100,
         distance: 50,
+        to_perlin: 10,
     };
 
     let timestamp: u64 = 100;
@@ -153,11 +93,6 @@ fn test_apply_arrival_reinforce() {
 
 #[test]
 fn test_apply_arrival_attack_success() {
-    use crate::planet::move_planet::apply_arrival;
-    use crate::types::planet::PlanetPublicState;
-    use crate::types::arrival::ArrivalData;
-    use dep::aztec::protocol_types::address::AztecAddress;
-
     let attacker = AztecAddress::from_field(456);
     let defender = AztecAddress::from_field(123);
 
@@ -177,6 +112,7 @@ fn test_apply_arrival_attack_success() {
         departure_time: 0,
         arrival_time: 100,
         distance: 50,
+        to_perlin: 15,
     };
 
     let timestamp: u64 = 100;
@@ -198,11 +134,6 @@ fn test_apply_arrival_attack_success() {
 
 #[test]
 fn test_apply_arrival_attack_defended() {
-    use crate::planet::move_planet::apply_arrival;
-    use crate::types::planet::PlanetPublicState;
-    use crate::types::arrival::ArrivalData;
-    use dep::aztec::protocol_types::address::AztecAddress;
-
     let attacker = AztecAddress::from_field(456);
     let defender = AztecAddress::from_field(123);
 
@@ -222,6 +153,7 @@ fn test_apply_arrival_attack_defended() {
         departure_time: 0,
         arrival_time: 100,
         distance: 50,
+        to_perlin: 20,
     };
 
     let timestamp: u64 = 100;
@@ -244,11 +176,6 @@ fn test_apply_arrival_attack_defended() {
 
 #[test]
 fn test_apply_arrival_not_yet_arrived() {
-    use crate::planet::move_planet::apply_arrival;
-    use crate::types::planet::PlanetPublicState;
-    use crate::types::arrival::ArrivalData;
-    use dep::aztec::protocol_types::address::AztecAddress;
-
     let owner = AztecAddress::from_field(123);
     let mut planet = PlanetPublicState::default();
     planet.owner = owner;
@@ -265,6 +192,7 @@ fn test_apply_arrival_not_yet_arrived() {
         departure_time: 0,
         arrival_time: 200,  // Future arrival
         distance: 50,
+        to_perlin: 5,
     };
 
     let timestamp: u64 = 100;  // Current time < arrival time
@@ -280,11 +208,6 @@ fn test_apply_arrival_not_yet_arrived() {
 
 #[test]
 fn test_apply_arrival_cap_overflow() {
-    use crate::planet::move_planet::apply_arrival;
-    use crate::types::planet::PlanetPublicState;
-    use crate::types::arrival::ArrivalData;
-    use dep::aztec::protocol_types::address::AztecAddress;
-
     let owner = AztecAddress::from_field(123);
     let mut planet = PlanetPublicState::default();
     planet.owner = owner;
@@ -302,6 +225,7 @@ fn test_apply_arrival_cap_overflow() {
         departure_time: 0,
         arrival_time: 100,
         distance: 50,
+        to_perlin: 25,
     };
 
     let timestamp: u64 = 100;
@@ -318,4 +242,3 @@ fn test_apply_arrival_cap_overflow() {
     assert(updated.population == 1000);  // Capped
     assert(updated.silver == 500);       // Capped
 }
-

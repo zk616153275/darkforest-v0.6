@@ -220,6 +220,9 @@ planet_arrivals: {
   /** Type-safe wrappers for the public methods exposed by the contract. */
   public declare methods: {
     
+    /** compute_planet_id(x: field, y: field) */
+    compute_planet_id: ((x: FieldLike, y: FieldLike) => ContractFunctionInteraction) & Pick<ContractMethod, 'selector'>;
+
     /** constructor(admin: struct, world_radius: integer, planethash_key: field, spacetype_key: field, perlin_length_scale: integer, init_perlin_min: integer, init_perlin_max: integer) */
     constructor: ((admin: AztecAddressLike, world_radius: (bigint | number), planethash_key: FieldLike, spacetype_key: FieldLike, perlin_length_scale: (bigint | number), init_perlin_min: (bigint | number), init_perlin_max: (bigint | number)) => ContractFunctionInteraction) & Pick<ContractMethod, 'selector'>;
 

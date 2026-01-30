@@ -14,6 +14,7 @@ pub struct ArrivalData {
     pub departure_time: u64,
     pub arrival_time: u64,
     pub distance: u64,
+    pub to_perlin: u64,
 }
 
 impl ArrivalData {
@@ -28,6 +29,7 @@ impl ArrivalData {
             departure_time: 0,
             arrival_time: 0,
             distance: 0,
+            to_perlin: 0,
         }
     }
 
@@ -37,8 +39,8 @@ impl ArrivalData {
 }
 
 impl Serialize for ArrivalData {
-    let N: u32 = 9;
-    fn serialize(self) -> [Field; 9] {
+    let N: u32 = 10;
+    fn serialize(self) -> [Field; 10] {
         [
             self.id as Field,
             self.player.to_field(),
@@ -48,14 +50,15 @@ impl Serialize for ArrivalData {
             self.silver_moved as Field,
             self.departure_time as Field,
             self.arrival_time as Field,
-            self.distance as Field
+            self.distance as Field,
+            self.to_perlin as Field,
         ]
     }
 }
 
 impl Deserialize for ArrivalData {
-    let N: u32 = 9;
-    fn deserialize(input: [Field; 9]) -> Self {
+    let N: u32 = 10;
+    fn deserialize(input: [Field; 10]) -> Self {
         Self {
             id: input[0] as u64,
             player: AztecAddress::from_field(input[1]),
@@ -66,16 +69,17 @@ impl Deserialize for ArrivalData {
             departure_time: input[6] as u64,
             arrival_time: input[7] as u64,
             distance: input[8] as u64,
+            to_perlin: input[9] as u64,
         }
     }
 }
 
 impl Packable for ArrivalData {
-    let N: u32 = 9;
-    fn pack(self) -> [Field; 9] {
+    let N: u32 = 10;
+    fn pack(self) -> [Field; 10] {
         self.serialize()
     }
-    fn unpack(input: [Field; 9]) -> Self {
+    fn unpack(input: [Field; 10]) -> Self {
         Self::deserialize(input)
     }
 }

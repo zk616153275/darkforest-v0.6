@@ -181,6 +181,7 @@
 
 - [x] 实现 `upgrade_planet(location, branch)`
 - [x] 编写测试
+- [x] **优化存储布局 (Storage Optimization)**: 将 `PlanetPublicState` 压缩至 21 字段以解决 Aztec SSTORE (64) 限制 ✅
 
 **验收**: 能在 Sandbox 成功初始化玩家并执行移动
 
@@ -301,6 +302,7 @@
 - [x] 测试能量/银矿计算
 - [x] 测试神器系统
 - [x] 测试边界条件和错误处理
+- [x] **测试模块化 (Test Refactor)**: 将所有测试分散到对应的模块源文件夹中 ✅
 
 ### 6.2 集成测试
 

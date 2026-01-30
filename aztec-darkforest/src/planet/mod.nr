@@ -6,3 +6,5 @@ pub mod init;
 pub mod move_planet;
 pub mod reveal;
 pub mod state;
+
+mod tests;

@@ -172,6 +172,7 @@ pub contract DarkForest {
         self.storage.planet_count.write(0);
         self.storage.player_count.write(0);
         self.storage.artifact_count.write(0);
+        self.storage.arrival_count.write(0);
         // [DIFF-6] Initialize revealed planet counter
         self.storage.revealed_count.write(0);
     }
@@ -520,6 +521,7 @@ pub contract DarkForest {
             departure_time: timestamp,
             arrival_time: arrival_time,
             distance: distance,
+            to_perlin: to_perlin,
         };
         self.storage.arrivals.at(arrival_id).write(arrival);
 
@@ -1231,6 +1233,22 @@ pub contract DarkForest {
     #[view]
     fn get_planet_artifact(planet_id: Field) -> pub Field {
         self.storage.planet_artifact.at(planet_id).read()
+    }
+
+
+    /// Compute planet ID from coordinates
+    /// This allows clients to calculate the planet ID using the same hash function as the contract
+    ///
+    /// # Arguments
+    /// * `x` - X coordinate
+    /// * `y` - Y coordinate
+    ///
+    /// # Returns
+    /// * The planet ID (Poseidon2 hash of x, y, planethash_key)
+    #[external("utility")]
+    unconstrained fn compute_planet_id(x: Field, y: Field) -> pub Field {
+        let planethash_key = self.storage.planethash_key.read();
+        compute_planet_hash(x, y, planethash_key)
     }
 }
 

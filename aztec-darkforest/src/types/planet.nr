@@ -55,6 +55,41 @@ pub struct PlanetPublicState {
     pub perlin: u64,
 }
 
+impl PlanetPublicState {
+    pub fn default() -> Self {
+        Self {
+            planet_id: 0,
+            owner: AztecAddress::zero(),
+            level: 0,
+            planet_type: 0,
+            space_type: 0,
+            range: 0,
+            speed: 0,
+            defense: 0,
+            population: 0,
+            population_cap: 0,
+            population_growth: 0,
+            silver_cap: 0,
+            silver_growth: 0,
+            silver: 0,
+            is_initialized: false,
+            is_home_planet: false,
+            is_destroyed: false,
+            last_updated: 0,
+            upgrade_state_0: 0,
+            upgrade_state_1: 0,
+            upgrade_state_2: 0,
+            hat_level: 0,
+            has_tried_finding_artifact: false,
+            prospected_block_number: 0,
+            invader: AztecAddress::zero(),
+            invade_start_block: 0,
+            capturer: AztecAddress::zero(),
+            perlin: 0,
+        }
+    }
+}
+
 /// Revealed coordinates public state
 /// Stores valid coordinates that have been revealed
 pub struct RevealedCoords {
@@ -107,83 +142,116 @@ impl Packable for RevealedCoords {
 }
 
 impl Serialize for PlanetPublicState {
-    let N: u32 = 28;
-    fn serialize(self) -> [Field; 28] {
+    let N: u32 = 21;
+    fn serialize(self) -> [Field; 21] {
+        // --- Combined Field 1 (Metadata): level, planet_type, space_type ---
+        // v0 + v1*256 + v2*65536
+        let metadata: Field = (self.level as Field)
+            + (self.planet_type as Field) * 256
+            + (self.space_type as Field) * 65536;
+
+        // --- Combined Field 2 (Upgrades): upgrade_state_0/1/2, hat_level ---
+        // v0 + v1*256 + v2*65536 + v3*16777216
+        let upgrades: Field = (self.upgrade_state_0 as Field)
+            + (self.upgrade_state_1 as Field) * 256
+            + (self.upgrade_state_2 as Field) * 65536
+            + (self.hat_level as Field) * 16777216;
+
+        // --- Combined Field 3 (Flags): is_initialized, is_home_planet, is_destroyed, has_tried_finding_artifact ---
+        // v0 + v1*2 + v2*4 + v3*8  (bools only need 1 bit each, but use 2 for simplicity)
+        let flags: Field = (self.is_initialized as Field)
+            + (self.is_home_planet as Field) * 2
+            + (self.is_destroyed as Field) * 4
+            + (self.has_tried_finding_artifact as Field) * 8;
+
         [
-            self.planet_id,
-            self.owner.to_field(),
-            self.level as Field,
-            self.planet_type as Field,
-            self.space_type as Field,
-            self.range as Field,
-            self.speed as Field,
-            self.defense as Field,
-            self.population as Field,
-            self.population_cap as Field,
-            self.population_growth as Field,
-            self.silver_cap as Field,
-            self.silver_growth as Field,
-            self.silver as Field,
-            self.is_initialized as Field,
-            self.is_home_planet as Field,
-            self.is_destroyed as Field,
-            self.last_updated as Field,
-            self.upgrade_state_0 as Field,
-            self.upgrade_state_1 as Field,
-            self.upgrade_state_2 as Field,
-            self.hat_level as Field,
-            self.has_tried_finding_artifact as Field,
-            self.prospected_block_number as Field,
-            self.invader.to_field(),
-            self.invade_start_block as Field,
-            self.capturer.to_field(),
-            self.perlin as Field
+            self.planet_id,                     // 0
+            self.owner.to_field(),              // 1
+            metadata,                           // 2 (Combined: level, planet_type, space_type)
+            upgrades,                           // 3 (Combined: upgrade_state_0/1/2, hat_level)
+            flags,                              // 4 (Combined: is_initialized, is_home_planet, is_destroyed, has_tried_finding_artifact)
+            self.range as Field,                // 5
+            self.speed as Field,                // 6
+            self.defense as Field,              // 7
+            self.population as Field,           // 8
+            self.population_cap as Field,       // 9
+            self.population_growth as Field,    // 10
+            self.silver as Field,               // 11
+            self.silver_cap as Field,           // 12
+            self.silver_growth as Field,        // 13
+            self.last_updated as Field,         // 14
+            self.prospected_block_number as Field, // 15
+            self.invade_start_block as Field,   // 16
+            self.perlin as Field,               // 17
+            self.invader.to_field(),            // 18
+            self.capturer.to_field(),           // 19
+            0                                   // 20 (Reserved for future use)
         ]
     }
 }
 
 impl Deserialize for PlanetPublicState {
-    let N: u32 = 28;
-    fn deserialize(input: [Field; 28]) -> Self {
+    let N: u32 = 21;
+    fn deserialize(input: [Field; 21]) -> Self {
+        // --- Unpack Combined Field 1 (Metadata) ---
+        let metadata = input[2] as u64;
+        let level = (metadata % 256) as u8;
+        let planet_type = ((metadata / 256) % 256) as u8;
+        let space_type = ((metadata / 65536) % 256) as u8;
+
+        // --- Unpack Combined Field 2 (Upgrades) ---
+        let upgrades = input[3] as u64;
+        let upgrade_state_0 = (upgrades % 256) as u8;
+        let upgrade_state_1 = ((upgrades / 256) % 256) as u8;
+        let upgrade_state_2 = ((upgrades / 65536) % 256) as u8;
+        let hat_level = ((upgrades / 16777216) % 256) as u8;
+
+        // --- Unpack Combined Field 3 (Flags) ---
+        let flags = input[4] as u64;
+        let is_initialized = (flags % 2) == 1;
+        let is_home_planet = ((flags / 2) % 2) == 1;
+        let is_destroyed = ((flags / 4) % 2) == 1;
+        let has_tried_finding_artifact = ((flags / 8) % 2) == 1;
+
         Self {
             planet_id: input[0],
             owner: AztecAddress::from_field(input[1]),
-            level: input[2] as u8,
-            planet_type: input[3] as u8,
-            space_type: input[4] as u8,
+            level,
+            planet_type,
+            space_type,
             range: input[5] as u64,
             speed: input[6] as u64,
             defense: input[7] as u64,
             population: input[8] as u64,
             population_cap: input[9] as u64,
             population_growth: input[10] as u64,
-            silver_cap: input[11] as u64,
-            silver_growth: input[12] as u64,
-            silver: input[13] as u64,
-            is_initialized: input[14] != 0,
-            is_home_planet: input[15] != 0,
-            is_destroyed: input[16] != 0,
-            last_updated: input[17] as u64,
-            upgrade_state_0: input[18] as u8,
-            upgrade_state_1: input[19] as u8,
-            upgrade_state_2: input[20] as u8,
-            hat_level: input[21] as u8,
-            has_tried_finding_artifact: input[22] != 0,
-            prospected_block_number: input[23] as u64,
-            invader: AztecAddress::from_field(input[24]),
-            invade_start_block: input[25] as u64,
-            capturer: AztecAddress::from_field(input[26]),
-            perlin: input[27] as u64,
+            silver_cap: input[12] as u64,
+            silver_growth: input[13] as u64,
+            silver: input[11] as u64,
+            is_initialized,
+            is_home_planet,
+            is_destroyed,
+            last_updated: input[14] as u64,
+            upgrade_state_0,
+            upgrade_state_1,
+            upgrade_state_2,
+            hat_level,
+            has_tried_finding_artifact,
+            prospected_block_number: input[15] as u64,
+            invader: AztecAddress::from_field(input[18]),
+            invade_start_block: input[16] as u64,
+            capturer: AztecAddress::from_field(input[19]),
+            perlin: input[17] as u64,
         }
     }
 }
 
 impl Packable for PlanetPublicState {
-    let N: u32 = 28;
-    fn pack(self) -> [Field; 28] {
+    let N: u32 = 21;
+    fn pack(self) -> [Field; 21] {
         self.serialize()
     }
-    fn unpack(input: [Field; 28]) -> Self {
+    fn unpack(input: [Field; 21]) -> Self {
         Self::deserialize(input)
     }
 }
